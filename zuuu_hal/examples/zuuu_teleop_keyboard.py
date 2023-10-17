@@ -36,7 +36,7 @@ import sys
 import geometry_msgs.msg
 import rclpy
 
-if sys.platform == 'win32':
+if sys.platform == "win32":
     import msvcrt
 else:
     import termios
@@ -67,32 +67,31 @@ CTRL-C to quit
 """
 
 moveBindings = {
-
-    'a': (0, 0, 0, 1),
-    'e': (0, 0, 0, -1),
-    '9': (1, -1, 0, 0),
-    '8': (1, 0, 0, 0),
-    '4': (0, 1, 0, 0),
-    '6': (0, -1, 0, 0),
-    '7': (1, 1, 0, 0),
-    '2': (-1, 0, 0, 0),
-    '3': (-1, -1, 0, 0),
-    '1': (-1, 1, 0, 0),
+    "a": (0, 0, 0, 1),
+    "e": (0, 0, 0, -1),
+    "9": (1, -1, 0, 0),
+    "8": (1, 0, 0, 0),
+    "4": (0, 1, 0, 0),
+    "6": (0, -1, 0, 0),
+    "7": (1, 1, 0, 0),
+    "2": (-1, 0, 0, 0),
+    "3": (-1, -1, 0, 0),
+    "1": (-1, 1, 0, 0),
 }
 
 linSpeedBindings = {
-    '+': 0.05,
-    '-': -0.05,
+    "+": 0.05,
+    "-": -0.05,
 }
 
 rotSpeedBindings = {
-    '*': 0.2,
-    '/': -0.2,
+    "*": 0.2,
+    "/": -0.2,
 }
 
 
 def getKey(settings):
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         # getwch() returns a string on Windows
         key = msvcrt.getwch()
     else:
@@ -104,13 +103,13 @@ def getKey(settings):
 
 
 def saveTerminalSettings():
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         return None
     return termios.tcgetattr(sys.stdin)
 
 
 def restoreTerminalSettings(old_settings):
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         return
     termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
@@ -120,8 +119,8 @@ def main():
 
     rclpy.init()
 
-    node = rclpy.create_node('teleop_twist_keyboard')
-    pub = node.create_publisher(geometry_msgs.msg.Twist, 'cmd_vel', 10)
+    node = rclpy.create_node("teleop_twist_keyboard")
+    pub = node.create_publisher(geometry_msgs.msg.Twist, "cmd_vel", 10)
 
     lin_speed = 0.5
     rot_speed = 2.0
@@ -134,7 +133,7 @@ def main():
 
     try:
         while True:
-            if (status == 0):
+            if status == 0:
                 print(msg)
             status = (status + 1) % 15
             key = getKey(settings)
@@ -152,14 +151,15 @@ def main():
                 y = 0.0
                 z = 0.0
                 th = 0.0
-                if (key == '\x03'):
+                if key == "\x03":
                     break
             x = x * lin_speed
             y = y * lin_speed
             th = th * rot_speed
-            print("\nx_vel: {:.2f}m/s, y_vel: {:.2f}m/s, theta_vel: {:.2f}rad/s.\n"
-                  "Max lin_vel: {:.2f}m/s, max rot_vel: {:.2f}rad/s".format(
-                      x, y, th, lin_speed, rot_speed))
+            print(
+                "\nx_vel: {:.2f}m/s, y_vel: {:.2f}m/s, theta_vel: {:.2f}rad/s.\n"
+                "Max lin_vel: {:.2f}m/s, max rot_vel: {:.2f}rad/s".format(x, y, th, lin_speed, rot_speed)
+            )
 
             twist = geometry_msgs.msg.Twist()
             twist.linear.x = x
@@ -186,5 +186,5 @@ def main():
         restoreTerminalSettings(settings)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

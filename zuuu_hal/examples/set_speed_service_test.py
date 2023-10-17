@@ -9,10 +9,10 @@ import traceback
 
 class SetSpeedServiceTest(Node):
     def __init__(self):
-        super().__init__('set_speed_service_test')
-        self.cli = self.create_client(SetSpeed, 'SetSpeed')
+        super().__init__("set_speed_service_test")
+        self.cli = self.create_client(SetSpeed, "SetSpeed")
         while not self.cli.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('service not available, waiting again...')
+            self.get_logger().info("service not available, waiting again...")
         self.req = SetSpeed.Request()
         self.t0 = time.time()
         self.create_timer(0.1, self.main_tick)
@@ -54,7 +54,7 @@ class SetSpeedServiceTest(Node):
                 self.cli.call_async(self.req)
                 self.state += 1
         else:
-            self.get_logger().info('Test finished')
+            self.get_logger().info("Test finished")
             self.destroy_node()
 
     def send_request(self):
@@ -77,5 +77,5 @@ def main(args=None):
         rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -10,6 +10,7 @@ from pyvesc.VESC import MultiVESC
 from sensor_msgs.msg import LaserScan
 from rclpy.qos import ReliabilityPolicy, QoSProfile
 import cv2
+
 """ 
 TODO: 
 log everything
@@ -43,19 +44,17 @@ def sign(x):
 class MobileBase:
     def __init__(
         self,
-        serial_port='/dev/ttyACM0',
+        serial_port="/dev/ttyACM0",
         left_wheel_id=24,
         right_wheel_id=72,
         back_wheel_id=None,
     ) -> None:
-
         params = [
-            {'can_id': left_wheel_id, 'has_sensor': True, 'start_heartbeat': True},
-            {'can_id': right_wheel_id, 'has_sensor': True, 'start_heartbeat': True},
-            {'can_id': back_wheel_id, 'has_sensor': True, 'start_heartbeat': True},
+            {"can_id": left_wheel_id, "has_sensor": True, "start_heartbeat": True},
+            {"can_id": right_wheel_id, "has_sensor": True, "start_heartbeat": True},
+            {"can_id": back_wheel_id, "has_sensor": True, "start_heartbeat": True},
         ]
-        self._multi_vesc = MultiVESC(
-            serial_port=serial_port, vescs_params=params)
+        self._multi_vesc = MultiVESC(serial_port=serial_port, vescs_params=params)
 
         self.left_wheel, self.right_wheel, self.back_wheel = self._multi_vesc.controllers
         self.left_wheel_measurements, self.right_wheel_measurements, self.back_wheel_measurements = None, None, None
@@ -68,23 +67,21 @@ class MobileBase:
 
 class FollowMe(Node):
     def __init__(self, no_joy=False):
-        super().__init__('follow_me')
+        super().__init__("follow_me")
         self.get_logger().info("Starting follow me behavior!")
         self.no_joy = no_joy
         self.laser_scan = None
 
         self.subscription = self.create_subscription(
-            LaserScan,
-            '/scan',
-            self.scan_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+            LaserScan, "/scan", self.scan_callback, QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
+        )
         self.subscription  # prevent unused variable warning... JESUS WHAT HAVE WE BECOME
 
         pygame.init()
         pygame.joystick.init()
 
         self.mode = CONTROLLER
-        if not(no_joy):
+        if not (no_joy):
             self.nb_joy = pygame.joystick.get_count()
             if self.nb_joy < 1:
                 self.get_logger().error("No controller detected.")
@@ -97,8 +94,7 @@ class FollowMe(Node):
         self.loop_freq = 100
         self.clock = pygame.time.Clock()
         self.t0 = time.time()
-        self.get_logger().info(
-            "Started. Press O for emergency stop. Press triangle to change modes.")
+        self.get_logger().info("Started. Press O for emergency stop. Press triangle to change modes.")
         self.create_timer(0.01, self.main_tick)
 
     def emergency_shutdown(self):
@@ -119,8 +115,7 @@ class FollowMe(Node):
         return d
 
     def get_barycenter_offset(self, range_min, range_max, detection_angle, verbose=False):
-        """Listen to the /scan LaserScan topic and outputs dlin_percent and dang_percent which represent how far away from the center of the chosen shape the barycenter of points is.
-        """
+        """Listen to the /scan LaserScan topic and outputs dlin_percent and dang_percent which represent how far away from the center of the chosen shape the barycenter of points is."""
 
         """ 
         sensor_msgs.msg.LaserScan(header=std_msgs.msg.Header(stamp=builtin_interfaces.msg.Time(sec=1643673771
@@ -138,7 +133,7 @@ class FollowMe(Node):
             return 0, 0
 
         absolute_range_max = 3.5
-        half_angle = detection_angle/2
+        half_angle = detection_angle / 2
         # rospy.loginfo("Waiting for laser scan")
         # laser_scan = rospy.wait_for_message("/tb3/scan", LaserScan, timeout=None)
         # rospy.loginfo("laser scan received!")
@@ -152,7 +147,7 @@ class FollowMe(Node):
         image = np.zeros((height, width, 3), np.uint8)
         index = -1
         center_x = width / 2
-        center_y = 0.5*(range_max + range_min) * pixel_per_meter
+        center_y = 0.5 * (range_max + range_min) * pixel_per_meter
         sum_x = 0
         sum_y = 0
 
@@ -160,8 +155,8 @@ class FollowMe(Node):
         if verbose:
             for i in range(width):
                 for j in range(height):
-                    angle = math.atan2(i-(width/2), j)
-                    dist = math.sqrt(((width/2)-i)**2 + j**2)/pixel_per_meter
+                    angle = math.atan2(i - (width / 2), j)
+                    dist = math.sqrt(((width / 2) - i) ** 2 + j**2) / pixel_per_meter
                     if dist >= range_min and dist <= range_max and abs(self.angle_diff(angle, 0)) < half_angle:
                         image[j, i] = (50, 50, 100)  # y, x as always
 
@@ -190,19 +185,21 @@ class FollowMe(Node):
                 image[y, x] = (255, 255, 255)  # y, x as always
             # print("Adding point {}".format(round(d*math.cos(angle)), round(width/2 + d*math.sin(angle))))
         if nb_points > 0:
-            sum_x = sum_x/nb_points
-            sum_y = sum_y/nb_points
+            sum_x = sum_x / nb_points
+            sum_y = sum_y / nb_points
             image[int(sum_y), int(sum_x)] = (255, 0, 0)  # y, x as always
             # Careful, x in image frame is -y lidar frame, and y in image frame is x in lidar frame
-            avg_angle = math.atan2(sum_x - width/2, sum_y)
-            dist = math.sqrt((sum_x-center_x)**2 + (sum_y-center_y)**2)
+            avg_angle = math.atan2(sum_x - width / 2, sum_y)
+            dist = math.sqrt((sum_x - center_x) ** 2 + (sum_y - center_y) ** 2)
             if center_y < sum_y:
                 dist *= -1
-            dlin_percent = max(-1, min(1, 2*dist /
-                               (pixel_per_meter*(range_max - range_min))))
-            dang_percent = max(-1, min(1, avg_angle/half_angle))
-            self.get_logger().info("avg_x_pixels={}, avg_y_pixels){}, avg_angle={}, dist_pixels={}, dlin_percent={}, dang_percent={}, center_y={}".format(
-                sum_x, sum_y, avg_angle, dist, dlin_percent, dang_percent, center_y))
+            dlin_percent = max(-1, min(1, 2 * dist / (pixel_per_meter * (range_max - range_min))))
+            dang_percent = max(-1, min(1, avg_angle / half_angle))
+            self.get_logger().info(
+                "avg_x_pixels={}, avg_y_pixels){}, avg_angle={}, dist_pixels={}, dlin_percent={}, dang_percent={}, center_y={}".format(
+                    sum_x, sum_y, avg_angle, dist, dlin_percent, dang_percent, center_y
+                )
+            )
         else:
             dlin_percent = 0
             dang_percent = 0
@@ -236,16 +233,16 @@ class FollowMe(Node):
                     self.emergency_shutdown()
                 if self.j.get_button(6):  # l2
                     self.get_logger().info("MORE translational speed!")
-                    self.lin_speed_ratio = min(1.0, self.lin_speed_ratio+0.05)
+                    self.lin_speed_ratio = min(1.0, self.lin_speed_ratio + 0.05)
                 if self.j.get_button(7):  # r2
                     self.get_logger().info("MORE rotational speed!")
-                    self.rot_speed_ratio = min(1.0, self.rot_speed_ratio+0.05)
+                    self.rot_speed_ratio = min(1.0, self.rot_speed_ratio + 0.05)
                 if self.j.get_button(4):  # l1
                     self.get_logger().info("LESS translational speed!")
-                    self.lin_speed_ratio = max(0.0, self.lin_speed_ratio-0.05)
+                    self.lin_speed_ratio = max(0.0, self.lin_speed_ratio - 0.05)
                 if self.j.get_button(5):  # r1
                     self.get_logger().info("LESS rotational speed!")
-                    self.rot_speed_ratio = max(0.0, self.rot_speed_ratio-0.05)
+                    self.rot_speed_ratio = max(0.0, self.rot_speed_ratio - 0.05)
 
             elif event.type == pygame.JOYBUTTONUP:
                 pass
@@ -283,7 +280,7 @@ class FollowMe(Node):
             self.get_logger().info("Button {:>2} value: {}".format(i, button))
 
     def cycle_from_joystick(self):
-        if (self.no_joy):
+        if self.no_joy:
             return (0), (0), (0)
         cycle_max_t = self.lin_speed_ratio  # 0.2*factor
         cycle_max_r = self.rot_speed_ratio  # 0.1*factor
@@ -295,7 +292,7 @@ class FollowMe(Node):
         return self.ik_vel(x, y, rot)
 
     def ik_vel(self, x, y, rot):
-        """Takes 2 linear speeds and 1 rot speed and outputs the PWM to apply to each of the 3 motors in an omni setup 
+        """Takes 2 linear speeds and 1 rot speed and outputs the PWM to apply to each of the 3 motors in an omni setup
 
         Args:
             x (float): x speed (between 0 and 1)
@@ -304,10 +301,8 @@ class FollowMe(Node):
         """
 
         cycle_back = x + rot
-        cycle_right = (x*np.cos(120*np.pi/180)) + \
-            (y*np.sin(120*np.pi/180)) + rot
-        cycle_left = (x*np.cos(240*np.pi/180)) + \
-            (y*np.sin(240*np.pi/180)) + rot
+        cycle_right = (x * np.cos(120 * np.pi / 180)) + (y * np.sin(120 * np.pi / 180)) + rot
+        cycle_left = (x * np.cos(240 * np.pi / 180)) + (y * np.sin(240 * np.pi / 180)) + rot
 
         return (cycle_back), (cycle_right), (cycle_left)
 
@@ -317,40 +312,32 @@ class FollowMe(Node):
         to_print = ""
         to_print += "temp_fet:{}\n".format(measurements.temp_fet)
         to_print += "temp_motor:{}\n".format(measurements.temp_motor)
-        to_print += "avg_motor_current:{}\n".format(
-            measurements.avg_motor_current)
-        to_print += "avg_input_current:{}\n".format(
-            measurements.avg_input_current)
+        to_print += "avg_motor_current:{}\n".format(measurements.avg_motor_current)
+        to_print += "avg_input_current:{}\n".format(measurements.avg_input_current)
         to_print += "avg_id:{}\n".format(measurements.avg_id)
         to_print += "avg_iq:{}\n".format(measurements.avg_iq)
         to_print += "duty_cycle_now:{}\n".format(measurements.duty_cycle_now)
         to_print += "rpm:{}\n".format(measurements.rpm)
         to_print += "v_in:{}\n".format(measurements.v_in)
         to_print += "amp_hours:{}\n".format(measurements.amp_hours)
-        to_print += "amp_hours_charged:{}\n".format(
-            measurements.amp_hours_charged)
+        to_print += "amp_hours_charged:{}\n".format(measurements.amp_hours_charged)
         to_print += "watt_hours:{}\n".format(measurements.watt_hours)
-        to_print += "watt_hours_charged:{}\n".format(
-            measurements.watt_hours_charged)
+        to_print += "watt_hours_charged:{}\n".format(measurements.watt_hours_charged)
         to_print += "tachometer:{}\n".format(measurements.tachometer)
         to_print += "tachometer_abs:{}\n".format(measurements.tachometer_abs)
         to_print += "mc_fault_code:{}\n".format(measurements.mc_fault_code)
         to_print += "pid_pos_now:{}\n".format(measurements.pid_pos_now)
-        to_print += "app_controller_id:{}\n".format(
-            measurements.app_controller_id)
+        to_print += "app_controller_id:{}\n".format(measurements.app_controller_id)
         to_print += "time_ms:{}\n".format(measurements.time_ms)
         return to_print
 
     def print_all_measurements(self):
         to_print = "\n*** back_wheel measurements:\n"
-        to_print += self.format_measurements(
-            self.omnibase.back_wheel_measurements)
+        to_print += self.format_measurements(self.omnibase.back_wheel_measurements)
         to_print += "\n\n*** left_wheel:\n"
-        to_print += self.format_measurements(
-            self.omnibase.left_wheel_measurements)
+        to_print += self.format_measurements(self.omnibase.left_wheel_measurements)
         to_print += "\n\n*** right_wheel:\n"
-        to_print += self.format_measurements(
-            self.omnibase.right_wheel_measurements)
+        to_print += self.format_measurements(self.omnibase.right_wheel_measurements)
         self.get_logger().info("{}".format(to_print))
 
     def main_tick(self):
@@ -360,7 +347,7 @@ class FollowMe(Node):
         if dt == 0:
             f = 0
         else:
-            f = 1/dt
+            f = 1 / dt
         self.get_logger().info("Potential freq: {:.0f}Hz".format(f))
         # Caping the actual freq
         # self.clock.tick(self.loop_freq)
@@ -368,22 +355,19 @@ class FollowMe(Node):
         self.omnibase.read_all_measurements()
         # self.print_all_measurements()
 
-        if not(self.no_joy):
+        if not (self.no_joy):
             self.tick_controller()
         if self.mode == CONTROLLER:
             duty_cycles = self.cycle_from_joystick()
 
         elif self.mode == FOLLOW_ME:
-            dlin_percent, dang_percent = self.get_barycenter_offset(
-                0.75, 2.25, math.pi/4)
+            dlin_percent, dang_percent = self.get_barycenter_offset(0.75, 2.25, math.pi / 4)
             min_val = 0.1
             tol = 0.2
-            dlin_percent = 0 if abs(
-                dlin_percent) < tol else 0.3*sign(dlin_percent)+0.7*dlin_percent
-            dang_percent = 0 if abs(
-                dang_percent) < tol else 0.3*sign(dang_percent)+0.7*dang_percent
-            dlin_percent = -dlin_percent*self.lin_speed_ratio
-            dang_percent = dang_percent*self.rot_speed_ratio
+            dlin_percent = 0 if abs(dlin_percent) < tol else 0.3 * sign(dlin_percent) + 0.7 * dlin_percent
+            dang_percent = 0 if abs(dang_percent) < tol else 0.3 * sign(dang_percent) + 0.7 * dang_percent
+            dlin_percent = -dlin_percent * self.lin_speed_ratio
+            dang_percent = dang_percent * self.rot_speed_ratio
             duty_cycles = self.ik_vel(0, dlin_percent, dang_percent)
         else:
             self.get_logger().warn("Can't happen ffs")
@@ -391,12 +375,9 @@ class FollowMe(Node):
         # Actually sending the commands
         self.get_logger().info("cycles : {}".format(duty_cycles))
 
-        self.omnibase.back_wheel.set_duty_cycle(
-            duty_cycles[0])
-        self.omnibase.left_wheel.set_duty_cycle(
-            duty_cycles[2])
-        self.omnibase.right_wheel.set_duty_cycle(
-            duty_cycles[1])
+        self.omnibase.back_wheel.set_duty_cycle(duty_cycles[0])
+        self.omnibase.left_wheel.set_duty_cycle(duty_cycles[2])
+        self.omnibase.right_wheel.set_duty_cycle(duty_cycles[1])
 
 
 def main(args=None):
@@ -413,7 +394,7 @@ def main(args=None):
         rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
 
 

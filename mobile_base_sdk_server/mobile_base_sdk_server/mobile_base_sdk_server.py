@@ -22,10 +22,10 @@ from reachy_utils.config import get_zuuu_version
 
 
 class MobileBaseServer(
-                        Node,
-                        mobile_platform_reachy_pb2_grpc.MobileBasePresenceServiceServicer,
-                        mobile_platform_reachy_pb2_grpc.MobilityServiceServicer,
-                        ):
+    Node,
+    mobile_platform_reachy_pb2_grpc.MobileBasePresenceServiceServicer,
+    mobile_platform_reachy_pb2_grpc.MobilityServiceServicer,
+):
     """Mobile base SDK server node."""
 
     def __init__(self, node_name: str) -> None:
@@ -40,50 +40,49 @@ class MobileBaseServer(
 
         self.clock = self.get_clock()
 
-        self.cmd_vel_pub = self.create_publisher(Twist, 'cmd_vel', 10)
+        self.cmd_vel_pub = self.create_publisher(Twist, "cmd_vel", 10)
 
-        self.set_speed_client = self.create_client(SetSpeed, 'SetSpeed')
+        self.set_speed_client = self.create_client(SetSpeed, "SetSpeed")
         while not self.set_speed_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('service SetSpeed not available, waiting again...')
+            self.get_logger().info("service SetSpeed not available, waiting again...")
 
-        self.go_to_client = self.create_client(GoToXYTheta, 'GoToXYTheta')
+        self.go_to_client = self.create_client(GoToXYTheta, "GoToXYTheta")
         while not self.go_to_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('service GoToXYTheta not available, waiting again...')
+            self.get_logger().info("service GoToXYTheta not available, waiting again...")
 
-        self.distance_to_goal_client = self.create_client(DistanceToGoal, 'DistanceToGoal')
+        self.distance_to_goal_client = self.create_client(DistanceToGoal, "DistanceToGoal")
         while not self.distance_to_goal_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('service DistanceToGoal not available, waiting again...')
+            self.get_logger().info("service DistanceToGoal not available, waiting again...")
 
-        self.set_zuuu_mode_client = self.create_client(SetZuuuMode, 'SetZuuuMode')
+        self.set_zuuu_mode_client = self.create_client(SetZuuuMode, "SetZuuuMode")
         while not self.set_zuuu_mode_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('service SetZuuuMode not available, waiting again...')
+            self.get_logger().info("service SetZuuuMode not available, waiting again...")
 
-        self.get_zuuu_mode_client = self.create_client(GetZuuuMode, 'GetZuuuMode')
+        self.get_zuuu_mode_client = self.create_client(GetZuuuMode, "GetZuuuMode")
         while not self.get_zuuu_mode_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('service GetZuuuMode not available, waiting again...')
+            self.get_logger().info("service GetZuuuMode not available, waiting again...")
 
-        self.get_battery_voltage_client = self.create_client(GetBatteryVoltage, 'GetBatteryVoltage')
+        self.get_battery_voltage_client = self.create_client(GetBatteryVoltage, "GetBatteryVoltage")
         while not self.get_battery_voltage_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('service GetBatteryVoltage not available, waiting again...')
+            self.get_logger().info("service GetBatteryVoltage not available, waiting again...")
 
-        self.get_odometry_client = self.create_client(GetOdometry, 'GetOdometry')
+        self.get_odometry_client = self.create_client(GetOdometry, "GetOdometry")
         while not self.get_odometry_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('service GetOdometry not available, waiting again...')
+            self.get_logger().info("service GetOdometry not available, waiting again...")
 
-        self.reset_odometry_client = self.create_client(ResetOdometry, 'ResetOdometry')
+        self.reset_odometry_client = self.create_client(ResetOdometry, "ResetOdometry")
         while not self.reset_odometry_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('service ResetOdometry not available, waiting again...')
+            self.get_logger().info("service ResetOdometry not available, waiting again...")
 
-        self.set_zuuu_safety = self.create_client(SetZuuuSafety, 'SetZuuuSafety')
+        self.set_zuuu_safety = self.create_client(SetZuuuSafety, "SetZuuuSafety")
         while not self.reset_odometry_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('service ResetOdometry not available, waiting again...')
+            self.get_logger().info("service ResetOdometry not available, waiting again...")
 
-        self.logger.info('Initialized mobile base server.')
+        self.logger.info("Initialized mobile base server.")
 
     def SendDirection(
-                    self,
-                    request: mobile_platform_reachy_pb2.TargetDirectionCommand,
-                    context) -> mobile_platform_reachy_pb2.MobilityServiceAck:
+        self, request: mobile_platform_reachy_pb2.TargetDirectionCommand, context
+    ) -> mobile_platform_reachy_pb2.MobilityServiceAck:
         """Send a speed command for the mobile base expressed in SI units."""
         twist = Twist()
         twist.linear.x = request.direction.x.value
@@ -97,9 +96,8 @@ class MobileBaseServer(
         return mobile_platform_reachy_pb2.MobilityServiceAck(success=BoolValue(value=True))
 
     def SendSetSpeed(
-                    self,
-                    request: mobile_platform_reachy_pb2.SetSpeedVector,
-                    context) -> mobile_platform_reachy_pb2.MobilityServiceAck:
+        self, request: mobile_platform_reachy_pb2.SetSpeedVector, context
+    ) -> mobile_platform_reachy_pb2.MobilityServiceAck:
         """Send a speed command for the mobile base expressed in SI units for a given duration."""
         req = SetSpeed.Request()
         req.duration = request.duration.value
@@ -111,9 +109,8 @@ class MobileBaseServer(
         return mobile_platform_reachy_pb2.MobilityServiceAck(success=BoolValue(value=True))
 
     def SendGoTo(
-                self,
-                request: mobile_platform_reachy_pb2.GoToVector,
-                context) -> mobile_platform_reachy_pb2.MobilityServiceAck:
+        self, request: mobile_platform_reachy_pb2.GoToVector, context
+    ) -> mobile_platform_reachy_pb2.MobilityServiceAck:
         """Send a target to the mobile base in the odom frame.
 
         The origin of the frame is initialised when the hal is started or whenever the odometry
@@ -136,7 +133,8 @@ class MobileBaseServer(
             delta_x=FloatValue(value=0.0),
             delta_y=FloatValue(value=0.0),
             delta_theta=FloatValue(value=0.0),
-            distance=FloatValue(value=0.0))
+            distance=FloatValue(value=0.0),
+        )
 
         req = DistanceToGoal.Request()
 
@@ -154,45 +152,40 @@ class MobileBaseServer(
         return response
 
     def SetControlMode(
-                    self,
-                    request: mobile_platform_reachy_pb2.ControlModeCommand,
-                    context) -> mobile_platform_reachy_pb2.MobilityServiceAck:
+        self, request: mobile_platform_reachy_pb2.ControlModeCommand, context
+    ) -> mobile_platform_reachy_pb2.MobilityServiceAck:
         """Set mobile base control mode.
 
         Two valid control modes are available: OPEN_LOOP and PID.
         """
         mode = mobile_platform_reachy_pb2.ControlModePossiblities.keys()[request.mode]
 
-        if mode == 'NONE_CONTROL_MODE':
+        if mode == "NONE_CONTROL_MODE":
             return mobile_platform_reachy_pb2.MobilityServiceAck(success=BoolValue(value=False))
 
-        run(f'ros2 param set /zuuu_hal control_mode {mode}', stdout=PIPE, shell=True)
+        run(f"ros2 param set /zuuu_hal control_mode {mode}", stdout=PIPE, shell=True)
         return mobile_platform_reachy_pb2.MobilityServiceAck(success=BoolValue(value=True))
 
-    def GetControlMode(
-                    self,
-                    request: Empty,
-                    context) -> mobile_platform_reachy_pb2.ControlModeCommand:
+    def GetControlMode(self, request: Empty, context) -> mobile_platform_reachy_pb2.ControlModeCommand:
         """Get mobile base control mode."""
-        output = check_output(['ros2', 'param', 'get', '/zuuu_hal', 'control_mode']).decode()
+        output = check_output(["ros2", "param", "get", "/zuuu_hal", "control_mode"]).decode()
 
         # Response from ros2 looks like: "String value is: MODE"
-        mode = output.split(': ')[-1].split()[0]
+        mode = output.split(": ")[-1].split()[0]
 
         mode_grpc = getattr(mobile_platform_reachy_pb2.ControlModePossiblities, mode)
         return mobile_platform_reachy_pb2.ControlModeCommand(mode=mode_grpc)
 
     def SetZuuuMode(
-                self,
-                request: mobile_platform_reachy_pb2.ZuuuModeCommand,
-                context) -> mobile_platform_reachy_pb2.MobilityServiceAck:
+        self, request: mobile_platform_reachy_pb2.ZuuuModeCommand, context
+    ) -> mobile_platform_reachy_pb2.MobilityServiceAck:
         """Set mobile base drive mode.
 
         Six valid drive modes are available: CMD_VEL, BRAKE, FREE_WHEEL, SPEED, GOTO, EMERGENCY_STOP.
         """
         mode = mobile_platform_reachy_pb2.ZuuuModePossiblities.keys()[request.mode]
 
-        if mode == 'NONE_ZUUU_MODE':
+        if mode == "NONE_ZUUU_MODE":
             return mobile_platform_reachy_pb2.MobilityServiceAck(success=BoolValue(value=False))
 
         req = SetZuuuMode.Request()
@@ -200,10 +193,7 @@ class MobileBaseServer(
         self.set_zuuu_mode_client.call_async(req)
         return mobile_platform_reachy_pb2.MobilityServiceAck(success=BoolValue(value=True))
 
-    def GetZuuuMode(
-                    self,
-                    request: Empty,
-                    context) -> mobile_platform_reachy_pb2.ZuuuModeCommand:
+    def GetZuuuMode(self, request: Empty, context) -> mobile_platform_reachy_pb2.ZuuuModeCommand:
         """Get mobile base drive mode."""
         req = GetZuuuMode.Request()
 
@@ -220,16 +210,11 @@ class MobileBaseServer(
         mode_grpc = getattr(mobile_platform_reachy_pb2.ZuuuModePossiblities, mode)
         return mobile_platform_reachy_pb2.ZuuuModeCommand(mode=mode_grpc)
 
-    def GetBatteryLevel(
-                self,
-                request: Empty,
-                context) -> mobile_platform_reachy_pb2.BatteryLevel:
+    def GetBatteryLevel(self, request: Empty, context) -> mobile_platform_reachy_pb2.BatteryLevel:
         """Get mobile base battery level in Volt."""
         req = GetBatteryVoltage.Request()
 
-        response = mobile_platform_reachy_pb2.BatteryLevel(
-            level=FloatValue(value=0.0)
-            )
+        response = mobile_platform_reachy_pb2.BatteryLevel(level=FloatValue(value=0.0))
 
         future = self.get_battery_voltage_client.call_async(req)
         for _ in range(1000):
@@ -240,10 +225,7 @@ class MobileBaseServer(
             time.sleep(0.001)
         return response
 
-    def GetOdometry(
-                self,
-                request: Empty,
-                context) -> mobile_platform_reachy_pb2.OdometryVector:
+    def GetOdometry(self, request: Empty, context) -> mobile_platform_reachy_pb2.OdometryVector:
         """Get mobile base odometry.
 
         x, y are in meters and theta is in radian.
@@ -266,10 +248,7 @@ class MobileBaseServer(
             time.sleep(0.001)
         return response
 
-    def ResetOdometry(
-                self,
-                request: Empty,
-                context) -> mobile_platform_reachy_pb2.MobilityServiceAck:
+    def ResetOdometry(self, request: Empty, context) -> mobile_platform_reachy_pb2.MobilityServiceAck:
         """Reset mobile base odometry.
 
         Current position of the mobile_base is taken as new origin of the odom frame.
@@ -278,20 +257,17 @@ class MobileBaseServer(
         self.reset_odometry_client.call_async(req)
         return mobile_platform_reachy_pb2.MobilityServiceAck(success=BoolValue(value=True))
 
-    def GetMobileBasePresence(
-                            self,
-                            request: Empty,
-                            context) -> mobile_platform_reachy_pb2.MobileBasePresence:
+    def GetMobileBasePresence(self, request: Empty, context) -> mobile_platform_reachy_pb2.MobileBasePresence:
         """Return if a mobile base is in Reachy's config file.
 
         If yes, return the mobile base version.
         """
         presence = False
-        version = '0.0'
+        version = "0.0"
 
         model = get_zuuu_version()
 
-        if model and model != 'None':
+        if model and model != "None":
             presence = True
             version = model
 
@@ -302,9 +278,8 @@ class MobileBaseServer(
         return response
 
     def SetZuuuSafety(
-                    self,
-                    request: mobile_platform_reachy_pb2.SetZuuuSafetyRequest,
-                    context) -> mobile_platform_reachy_pb2.MobilityServiceAck:
+        self, request: mobile_platform_reachy_pb2.SetZuuuSafetyRequest, context
+    ) -> mobile_platform_reachy_pb2.MobilityServiceAck:
         """Set on/off the anti-collision safety handled by the mobile base hal."""
         req = SetZuuuSafety.Request()
         req.safety_on = request.safety_on.value
@@ -316,18 +291,18 @@ def main():
     """Run the Node and the gRPC server."""
     rclpy.init()
 
-    mobile_base_server = MobileBaseServer(node_name='mobile_base_server')
+    mobile_base_server = MobileBaseServer(node_name="mobile_base_server")
 
     options = [
-         ('grpc.max_send_message_length', 250000),
-         ('grpc.max_receive_message_length', 250000),
-         ]
+        ("grpc.max_send_message_length", 250000),
+        ("grpc.max_receive_message_length", 250000),
+    ]
 
     server = grpc.server(thread_pool=ThreadPoolExecutor(max_workers=10), options=options)
     mobile_platform_reachy_pb2_grpc.add_MobilityServiceServicer_to_server(mobile_base_server, server)
     mobile_platform_reachy_pb2_grpc.add_MobileBasePresenceServiceServicer_to_server(mobile_base_server, server)
 
-    server.add_insecure_port('[::]:50061')
+    server.add_insecure_port("[::]:50061")
     server.start()
 
     try:
@@ -342,5 +317,5 @@ def main():
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

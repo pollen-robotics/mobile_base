@@ -24,25 +24,21 @@ def sign(x):
 
 class FollowMe(Node):
     def __init__(self):
-        super().__init__('follow_me')
+        super().__init__("follow_me")
         self.get_logger().info("Starting follow me behavior!")
         self.laser_scan = None
 
         self.subscription = self.create_subscription(
-            LaserScan,
-            '/scan',
-            self.scan_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+            LaserScan, "/scan", self.scan_callback, QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
+        )
         self.subscription  # prevent unused variable warning... JESUS WHAT HAVE WE BECOME
 
-        self.cmd_pub = self.create_publisher(
-            Twist, 'cmd_vel', 10)
+        self.cmd_pub = self.create_publisher(Twist, "cmd_vel", 10)
 
         self.lin_max_speed = 0.5
         self.rot_max_speed = 1.2
         self.t0 = time.time()
-        self.get_logger().info(
-            "Follow me started.")
+        self.get_logger().info("Follow me started.")
         self.create_timer(0.01, self.main_tick)
 
     def emergency_shutdown(self):
@@ -89,7 +85,7 @@ class FollowMe(Node):
             return 0, 0
 
         absolute_range_max = 3.5
-        half_angle = detection_angle/2
+        half_angle = detection_angle / 2
 
         angle_increment = self.laser_scan.angle_increment
         pixel_per_meter = 250
@@ -100,7 +96,7 @@ class FollowMe(Node):
         image = np.zeros((height, width, 3), np.uint8)
         index = -1
         center_x = width / 2
-        center_y = 0.5*(range_max + range_min) * pixel_per_meter
+        center_y = 0.5 * (range_max + range_min) * pixel_per_meter
         sum_x = 0
         sum_y = 0
 
@@ -108,8 +104,8 @@ class FollowMe(Node):
         if verbose:
             for i in range(width):
                 for j in range(height):
-                    angle = math.atan2(i-(width/2), j)
-                    dist = math.sqrt(((width/2)-i)**2 + j**2)/pixel_per_meter
+                    angle = math.atan2(i - (width / 2), j)
+                    dist = math.sqrt(((width / 2) - i) ** 2 + j**2) / pixel_per_meter
                     if dist >= range_min and dist <= range_max and abs(self.angle_diff(angle, 0)) < half_angle:
                         image[j, i] = (50, 50, 100)  # y, x as always
 
@@ -138,18 +134,17 @@ class FollowMe(Node):
                 image[y, x] = (255, 255, 255)  # y, x as always
             # print("Adding point {}".format(round(d*math.cos(angle)), round(width/2 + d*math.sin(angle))))
         if nb_points > 0:
-            sum_x = sum_x/nb_points
-            sum_y = sum_y/nb_points
+            sum_x = sum_x / nb_points
+            sum_y = sum_y / nb_points
             image[int(sum_y), int(sum_x)] = (255, 0, 0)  # y, x as always
             # Careful, x in image frame is -y lidar frame, and y in image frame is x in lidar frame
-            avg_angle = math.atan2(sum_x - width/2, sum_y)
+            avg_angle = math.atan2(sum_x - width / 2, sum_y)
             # dist = math.sqrt((sum_x-center_x)**2 + (sum_y-center_y)**2)
-            dist = abs(sum_y-center_y)
+            dist = abs(sum_y - center_y)
             if center_y < sum_y:
                 dist *= -1
-            dlin_percent = max(-1, min(1, 2*dist /
-                               (pixel_per_meter*(range_max - range_min))))
-            dang_percent = max(-1, min(1, avg_angle/half_angle))
+            dlin_percent = max(-1, min(1, 2 * dist / (pixel_per_meter * (range_max - range_min))))
+            dang_percent = max(-1, min(1, avg_angle / half_angle))
             # self.get_logger().info("avg_x_pixels={}, avg_y_pixels){}, avg_angle={}, dist_pixels={}, dlin_percent={},
             #  dang_percent={}, center_y={}".format(sum_x, sum_y, avg_angle,
             #  dist, dlin_percent, dang_percent, center_y))
@@ -171,17 +166,15 @@ class FollowMe(Node):
             if dt == 0:
                 f = 0
             else:
-                f = 1/dt
+                f = 1 / dt
             self.get_logger().info("Potential freq: {:.0f}Hz".format(f))
 
         # dlin_percent, dang_percent = self.get_barycenter_offset(0.75, 2.25, math.pi/4)
-        dlin_percent, dang_percent = self.get_barycenter_offset(
-            0.3, 1.0, math.pi/4)
+        dlin_percent, dang_percent = self.get_barycenter_offset(0.3, 1.0, math.pi / 4)
 
-        lin_speed = -dlin_percent*self.lin_max_speed
-        rot_speed = dang_percent*self.rot_max_speed
-        self.get_logger().info("lin_speed={:.2f}, rot_speed={:.2f}".format(
-            lin_speed, rot_speed))
+        lin_speed = -dlin_percent * self.lin_max_speed
+        rot_speed = dang_percent * self.rot_max_speed
+        self.get_logger().info("lin_speed={:.2f}, rot_speed={:.2f}".format(lin_speed, rot_speed))
         twist = Twist()
         twist.linear.x = lin_speed
         twist.linear.y = 0.0
@@ -198,7 +191,7 @@ def main(args=None):
         node = FollowMe()
     except Exception:
         rclpy.logging._root_logger.error(traceback.format_exc())
-        rclpy.logging._root_logger.error('Failed to init FollowMe')
+        rclpy.logging._root_logger.error("Failed to init FollowMe")
         rclpy.shutdown()
         sys.exit(1)
 
@@ -212,5 +205,5 @@ def main(args=None):
         rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

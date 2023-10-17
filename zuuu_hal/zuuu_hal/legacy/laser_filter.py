@@ -16,30 +16,26 @@ from tf2_ros import TransformBroadcaster
 import tf_transformations
 import copy
 
-LASER_UPPER_ANGLE = math.pi*2 - math.pi/4
-LASER_LOWER_ANGLE = math.pi/4
+LASER_UPPER_ANGLE = math.pi * 2 - math.pi / 4
+LASER_LOWER_ANGLE = math.pi / 4
+
 
 class LaserFilter(Node):
     def __init__(self):
-        super().__init__('zuuu_laser_filter')
+        super().__init__("zuuu_laser_filter")
         self.get_logger().info("Starting zuuu_laser_filter!")
 
         # TODO Temporary fix since https://github.com/ros-perception/laser_filters doesn't work on Foxy aparently
         self.scan_sub = self.create_subscription(
-            LaserScan,
-            '/scan',
-            self.scan_filter_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+            LaserScan, "/scan", self.scan_filter_callback, QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
+        )
         self.scan_sub  # prevent unused variable warning... JESUS WHAT HAVE WE BECOME
-        self.scan_pub = self.create_publisher(
-            LaserScan, 'scan_filtered', 10)
+        self.scan_pub = self.create_publisher(LaserScan, "scan_filtered", 10)
 
-        self.get_logger().info(
-            "zuuu_laser_filter started")
+        self.get_logger().info("zuuu_laser_filter started")
 
-
-    def scan_filter_callback(self, msg) :
-        filtered_scan = LaserScan() 
+    def scan_filter_callback(self, msg):
+        filtered_scan = LaserScan()
         filtered_scan.header = copy.deepcopy(msg.header)
         filtered_scan.angle_min = msg.angle_min
         filtered_scan.angle_max = msg.angle_max
@@ -51,11 +47,11 @@ class LaserFilter(Node):
         ranges = []
         intensities = []
         for i, r in enumerate(msg.ranges):
-            angle = msg.angle_min + i*msg.angle_increment
-            if angle > LASER_UPPER_ANGLE or angle < LASER_LOWER_ANGLE :
+            angle = msg.angle_min + i * msg.angle_increment
+            if angle > LASER_UPPER_ANGLE or angle < LASER_LOWER_ANGLE:
                 ranges.append(0.0)
                 intensities.append(0.0)
-            else :
+            else:
                 ranges.append(r)
                 intensities.append(msg.intensities[i])
         filtered_scan.ranges = ranges
@@ -67,7 +63,6 @@ class LaserFilter(Node):
         d = a - b
         d = ((d + math.pi) % (2 * math.pi)) - math.pi
         return d
-
 
 
 def main(args=None):
@@ -83,5 +78,5 @@ def main(args=None):
         rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

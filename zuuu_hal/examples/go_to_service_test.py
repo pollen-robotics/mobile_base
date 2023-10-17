@@ -9,10 +9,10 @@ import traceback
 
 class GoToServiceTest(Node):
     def __init__(self):
-        super().__init__('go_to_service_test')
-        self.cli = self.create_client(GoToXYTheta, 'GoToXYTheta')
+        super().__init__("go_to_service_test")
+        self.cli = self.create_client(GoToXYTheta, "GoToXYTheta")
         while not self.cli.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('service not available, waiting again...')
+            self.get_logger().info("service not available, waiting again...")
         self.req = GoToXYTheta.Request()
         self.t0 = time.time()
         self.create_timer(0.1, self.main_tick)
@@ -53,7 +53,7 @@ class GoToServiceTest(Node):
                 self.cli.call_async(self.req)
                 self.state += 1
         else:
-            self.get_logger().info('Test finished')
+            self.get_logger().info("Test finished")
             self.destroy_node()
 
     def send_request(self):
@@ -76,5 +76,5 @@ def main(args=None):
         rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

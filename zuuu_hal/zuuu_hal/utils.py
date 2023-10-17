@@ -3,16 +3,14 @@ import time
 
 
 def angle_diff(a: float, b: float) -> float:
-    """Returns the smallest distance between 2 angles
-    """
+    """Returns the smallest distance between 2 angles"""
     d = a - b
     d = ((d + math.pi) % (2 * math.pi)) - math.pi
     return d
 
 
 def sign(x: float) -> int:
-    """Returns 1 if x >= 0, -1 otherwise
-    """
+    """Returns 1 if x >= 0, -1 otherwise"""
     if x >= 0:
         return 1
     else:
@@ -20,8 +18,9 @@ def sign(x: float) -> int:
 
 
 class PID:
-    def __init__(self, p: float = 1.0, i: float = 0.0, d: float = 0.0, max_command: float = 10.0,
-                 max_i_contribution: float = 5.0):
+    def __init__(
+        self, p: float = 1.0, i: float = 0.0, d: float = 0.0, max_command: float = 10.0, max_i_contribution: float = 5.0
+    ):
         """PID implementation with anti windup.
         Keyword Arguments:
             P {float} -- Proportional gain (default: {1.0})
@@ -44,15 +43,13 @@ class PID:
         self.prev_t = time.time()
 
     def set_goal(self, goal_value: float) -> None:
-        """Sets the goal state
-        """
+        """Sets the goal state"""
         self.goal_value = goal_value
         # Reseting the persistent data because the goal state changed
         self.reset()
 
     def reset(self) -> None:
-        """Resets the integral portion, dt and the differential contribution
-        """
+        """Resets the integral portion, dt and the differential contribution"""
         self.i_contribution = 0
         self.prev_t = time.time()
         self.prev_error = self.goal_value - self.current_value
@@ -93,8 +90,7 @@ class PID:
             d_contribution = 0.0
 
         self.i_contribution = self.i_contribution + self.i * error
-        self.i_contribution = self.limit(
-            self.i_contribution, self.max_i_contribution)
+        self.i_contribution = self.limit(self.i_contribution, self.max_i_contribution)
 
         self.command = p_contribution + self.i_contribution + d_contribution
         self.command = self.limit(self.command, self.max_command)
