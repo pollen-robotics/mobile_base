@@ -44,7 +44,7 @@ ros2 launch zuuu_hal hal.launch.py
 ```
 
 ### Running the HAL and the Mobile base SDK server
-If you want to use our [Python SDK](../mobile-base-sdk) to control the mobile base with Python commands instead of working at the ROS level, you will have to launch both the HAL and the Mobile base SDK server. See *run_mobile_base_sdk_server_and_hal.launch.py* from the [mobile base SDk server](../mobile-base-sdk) for this.
+If you want to use our [Python SDK](https://github.com/pollen-robotics/mobile-base-sdk) to control the mobile base with Python commands instead of working at the ROS level, you will have to launch both the HAL and the Mobile base SDK server. See *run_mobile_base_sdk_server_and_hal.launch.py* from the [mobile base SDk server](../mobile_base_sdk_server) for this.
 
 ### Sending speed commands
 Once the zuuu_hal is started, one can take control of the mobile base with:
