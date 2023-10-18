@@ -85,8 +85,8 @@ class JoyTeleop(Node):
             self.emergency_shutdown()
         self.get_logger().info("nb joysticks: {}".format(self.nb_joy))
         self.j = pygame.joystick.Joystick(0)
-        self.lin_speed_ratio = 0.5
-        self.rot_speed_ratio = 2.0
+        self.lin_speed_ratio = 0.15
+        self.rot_speed_ratio = 1.5
         # The joyticks dont come back at a perfect 0 position when released.
         # Any abs(value) below min_joy_position will be assumed to be 0
         self.min_joy_position = 0.03
@@ -197,6 +197,16 @@ class JoyTeleop(Node):
         else:
             rot = -self.j.get_axis(3) * cycle_max_r
 
+        # Making sure that the xy_speed doesn't go beyond a fixed maximum: (some controllers give (1, 1) when pressed diagonaly instead of (0.5, 0.5)
+        xy_speed = math.sqrt(x**2 + y**2)
+        max_speed_xy = cycle_max_t
+        if xy_speed > max_speed_xy:
+            # This formula guarantees that the ratio x/y remains the same, while ensuring the xy_speed is equal to max_speed_xy
+            new_x = math.sqrt(max_speed_xy**2 / (1 + (y**2) / (x**2)))
+            new_y = new_x * y / x
+            # The formula can mess up the signs, fixing them here
+            x = sign(x) * new_x / sign(new_x)
+            y = sign(y) * new_y / sign(new_y)
         return x, y, rot
 
     def main_tick(self):
