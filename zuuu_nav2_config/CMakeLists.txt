@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(zuuu_description)
+project(zuuu_nav2_config)
 
 # Default to C99
 if(NOT CMAKE_C_STANDARD)
@@ -22,7 +22,7 @@ find_package(ament_cmake REQUIRED)
 # find_package(<dependency> REQUIRED)
 
 install(
-  DIRECTORY urdf launch rviz config rviz meshes
+  DIRECTORY launch rviz config maps
   DESTINATION share/${PROJECT_NAME}
 )
 

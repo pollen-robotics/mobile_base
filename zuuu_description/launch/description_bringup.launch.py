@@ -82,7 +82,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             name="use_sim_time",
-            default_value="False",
+            default_value="True",
             description="Flag to enable use_sim_time",
         ),
     ]
@@ -128,7 +128,6 @@ def generate_launch_description():
         controller_manager_node,
         # robot_localization_node,
     ]
-
     # Launch files to call
     launches = []
 
