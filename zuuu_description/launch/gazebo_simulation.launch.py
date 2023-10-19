@@ -49,11 +49,11 @@ def generate_launch_description():
             " ",
             "use_gazebo:=true",
             " ",
-            "use_fake_components:=false",
+            "use_fake_components:=true",
             " ",
             "use_fixed_wheels:=true",
             " ",
-            "use_ros_control:=true",
+            "use_ros_control:=false",
         ]
     )
     robot_description = {"robot_description": robot_description_content}
@@ -99,15 +99,15 @@ def generate_launch_description():
         parameters=[robot_description, use_sim_time_param],
     )
 
-    controller_manager_node = Node(
-        package="controller_manager",
-        executable="ros2_control_node",
-        parameters=[robot_description, zuuu_controller, use_sim_time_param],
-        output={
-            "stdout": "screen",
-            "stderr": "screen",
-        },
-    )
+    # controller_manager_node = Node(
+    #     package="controller_manager",
+    #     executable="ros2_control_node",
+    #     parameters=[robot_description, zuuu_controller, use_sim_time_param],
+    #     output={
+    #         "stdout": "screen",
+    #         "stderr": "screen",
+    #     },
+    # )
     # Call this to have 'ros2 control list_controllers' give :
     # joint_state_broadcaster[joint_state_broadcaster/JointStateBroadcaster] active
     joint_state_broadcaster_spawner = Node(
@@ -117,13 +117,13 @@ def generate_launch_description():
         parameters=[use_sim_time_param],
         output="screen",
     )
-    # joint_state_publisher_node = Node(
-    #     package='joint_state_publisher',
-    #     executable='joint_state_publisher',
-    #     name='joint_state_publisher',
-    #     parameters=[use_sim_time_param],
-    #     condition=launch.conditions.UnlessCondition(LaunchConfiguration('gui'))
-    # )
+    joint_state_publisher_node = Node(
+        package="joint_state_publisher",
+        executable="joint_state_publisher",
+        name="joint_state_publisher",
+        parameters=[use_sim_time_param],
+        condition=launch.conditions.UnlessCondition(LaunchConfiguration("gui")),
+    )
 
     # To get all the available options:
     # ros2 run gazebo_ros spawn_entity.py -h
@@ -151,7 +151,7 @@ def generate_launch_description():
         joint_state_broadcaster_spawner,
         robot_state_publisher_node,
         spawn_entity,
-        controller_manager_node,
+        # controller_manager_node,
     ]
 
     # Launch files to call
@@ -165,6 +165,11 @@ def generate_launch_description():
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(pkg_gazebo_ros, "launch", "gzclient.launch.py")
+            ),
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                os.path.join(pkg_share, "launch", "rviz_bringup.launch.py")
             ),
         ),
     ]

@@ -1,42 +1,19 @@
-## Context
-Temporary repository to build the mechanical description of the zuu mobile base.
-Eventually, will be merged into :
-https://github.com/pollen-robotics/reachy2021_ros2_control/tree/main/reachy_description
-
-## Setup
-Add to your bashrc:
-```
-export GAZEBO_RESOURCE_PATH=/usr/share/gazebo-11
-export ZUUU_MAP_NAME=hospital
-```
-
-Create a /meshes folder:
-```
-mkdir -p zuuu_description/meshes
-cd zuuu_description/meshes
-```
-
-Download the mesh used: [link](https://drive.google.com/file/d/1y3KqgaIK0916n6ELnhmQw_U-jSFYrvL3/view?usp=sharing%29).
+## Purpose
+Mechanical description of the mobile base Zuuu.
 
 ## Usage
-For a simulated environment:
 ```
-ros2 launch zuuu_description full_simulation_navigation.launch.py
+ros2 launch zuuu_description gazebo_simulation.launch.py
 ```
+You should then be able to pilot the robot with:
+```
+ros2 run zuuu_hal teleop_keyboard
+```
+![](description.png)
 
-To create a map on the physical robot:
-```
-ros2 launch zuuu_description zuuu_full_navigation.launch.py
-```
-
-To start the navigation on the physical robot, if your map name is jean_jaures_haut.yaml, add this to your bashrc:
-```
-export ZUUU_MAP_NAME=jean_jaures_haut
-```
-Then:
-```
-ros2 launch zuuu_description zuuu_full_navigation.launch.py
-```
+## TODOs (updated 19/10/2023)
+- Add a mesh for the mobile base only, and not a monolith of the entire Reachy Mobile
+- If useful bind ros controllers in velocity mode. I had something working under foxy, doesn't work anyomore, but afaik it's not useful so not porting it
 
 ## List of launch files and uses
 Launch files starting with "zuuu" are intended to be used on the physical robot.
@@ -68,20 +45,6 @@ Default parameters for robot_description_content :
 'use_ros_control:=true',
 
 
-### full_simulation_navigation
-Launches: 
-gazebo_simulation
-navigation
-rviz_navigation
-
-### mapping
-Nodes:
-slam_toolbox
-
-### navigation
-Launches:
-Nav2's bringup_launch
-
 ### rviz_bringup
 Nodes:
 rviz2
@@ -106,13 +69,3 @@ zuuu_rplidar_s2_launch
 description_bringup
 hal_launch
 
-
-### zuuu_full_mapping
-Launches:
-zuuu_bringup
-mapping
-
-### zuuu_full_navigation
-Launches:
-zuuu_bringup
-navigation

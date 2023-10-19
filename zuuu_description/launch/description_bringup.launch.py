@@ -3,24 +3,15 @@ import launch_ros
 import os
 
 from launch import LaunchDescription
-from launch import event_handlers
 from launch.actions import (
     DeclareLaunchArgument,
-    IncludeLaunchDescription,
-    RegisterEventHandler,
-    ExecuteProcess,
 )
-from launch.conditions import IfCondition
-from launch.event_handlers import OnProcessExit
-from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import (
     Command,
     FindExecutable,
     LaunchConfiguration,
     PathJoinSubstitution,
 )
-from ament_index_python.packages import get_package_share_directory
-
 
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -44,11 +35,11 @@ def generate_launch_description():
             " ",
             "use_gazebo:=false",
             " ",
-            "use_fake_components:=false",
+            "use_fake_components:=true",
             " ",
-            "use_fixed_wheels:=true",
+            "use_fixed_wheels:=false",
             " ",
-            "use_ros_control:=true",
+            "use_ros_control:=false",
         ]
     )
     robot_description = {"robot_description": robot_description_content}
@@ -112,21 +103,20 @@ def generate_launch_description():
         parameters=[use_sim_time_param],
         output="screen",
     )
-    # joint_state_publisher_node = Node(
-    #     package='joint_state_publisher',
-    #     executable='joint_state_publisher',
-    #     name='joint_state_publisher',
-    #     parameters=[use_sim_time_param],
-    #     condition=launch.conditions.UnlessCondition(LaunchConfiguration('gui'))
-    # )
+    joint_state_publisher_node = Node(
+        package="joint_state_publisher",
+        executable="joint_state_publisher",
+        name="joint_state_publisher",
+        parameters=[use_sim_time_param],
+        condition=launch.conditions.UnlessCondition(LaunchConfiguration("gui")),
+    )
 
     # Nodes to call
     nodes = [
-        # joint_state_publisher_node,
+        joint_state_publisher_node,
         joint_state_broadcaster_spawner,
         robot_state_publisher_node,
-        controller_manager_node,
-        # robot_localization_node,
+        # controller_manager_node,
     ]
     # Launch files to call
     launches = []
