@@ -5,12 +5,18 @@ from subprocess import run, PIPE, check_output
 from concurrent.futures import ThreadPoolExecutor
 from queue import Empty
 
+from PIL import Image as PilImage
+import io
+import zlib
+
 import grpc
 from google.protobuf.wrappers_pb2 import BoolValue, FloatValue
 
+from cv_bridge import CvBridge
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
+from sensor_msgs.msg import Image
 
 from mobile_base_sdk_api import mobile_base_pb2
 from mobile_base_sdk_api import mobile_base_pb2_grpc
@@ -42,6 +48,9 @@ class MobileBaseServer(
         self.clock = self.get_clock()
 
         self.cmd_vel_pub = self.create_publisher(Twist, "cmd_vel", 10)
+
+        self.bridge = CvBridge()
+        self.lidar_img_subscriber = self.create_subscription(Image, 'lidar_image', self.get_lidar_img, 1)
 
         self.set_speed_client = self.create_client(SetSpeed, "SetSpeed")
         while not self.set_speed_client.wait_for_service(timeout_sec=1.0):
@@ -80,6 +89,9 @@ class MobileBaseServer(
             self.get_logger().info("service ResetOdometry not available, waiting again...")
 
         self.logger.info("Initialized mobile base server.")
+
+    def get_lidar_img(self, msg):
+        self.lidar_img = self.bridge.imgmsg_to_cv2(msg)
 
     def SendDirection(
         self, request: mobile_base_pb2.TargetDirectionCommand, context
@@ -286,6 +298,18 @@ class MobileBaseServer(
         req.safety_on = request.safety_on.value
         self.set_zuuu_safety.call_async(req)
         return mobile_base_pb2.MobilityServiceAck(success=BoolValue(value=True))
+
+    def GetLidarMap(
+        self, request: Empty, context
+    ) -> mobile_base_pb2.LidarMap:
+        """Get the lidar map."""
+        img = PilImage.fromarray(self.lidar_img)
+
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")  # Vous pouvez changer le format si nécessaire
+        uncompressed_bytes = buf.getvalue()
+        compressed_bytes = zlib.compress(uncompressed_bytes)
+        return mobile_base_pb2.LidarMap(data=compressed_bytes)
 
 
 def main():
