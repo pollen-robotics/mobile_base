@@ -1,5 +1,6 @@
 import os
 import math
+import numpy as np
 import traceback
 from subprocess import check_output
 from typing import List
@@ -77,7 +78,7 @@ class LidarSafety:
                 # Adding an unsafe angle to avoid going fast where we're blind
                 self.unsafe_angles.append(self.create_forbidden_angles(angle, 0.25))
                 continue
-            dist = self.dist_to_point(r, angle)
+            dist, _, _ = self.dist_to_point(r, angle)
             if dist < self.critical_distance and (msg.intensities[i] > 0.1):
                 self.at_least_one_critical = True
                 self.critical_angles.append(self.create_forbidden_angles(angle, dist))
@@ -129,7 +130,7 @@ class LidarSafety:
 
         x = x + self.x_offset
         dist = math.sqrt(x**2 + y**2)
-        return dist
+        return dist, x, y
 
     def create_forbidden_angles(self, angle: float, dist: float) -> List[float]:
         """Creates a pair [angle, half_forbidden_angle_span].
@@ -137,3 +138,30 @@ class LidarSafety:
         # Half of the forbidden angle span
         beta = abs(math.atan2(self.robot_collision_radius, dist))
         return [angle, beta]
+
+    def create_safety_img(self, msg: LaserScan, range_max: float = 3.0) -> None:
+        if msg is None:
+            return 0, 0
+
+        pixel_per_meter = 250
+        image_size = int(range_max * pixel_per_meter)
+        height = image_size
+        width = image_size
+        image = np.zeros((height, width, 3), np.uint8)
+        center_x = int(round(width / 2))
+        center_y = int(round(height/2))
+
+        for i, r in enumerate(msg.ranges):
+            angle = msg.angle_min + i*msg.angle_increment
+            if r < 0.01:
+                # Code value for "no detection". e.g. the lidar filter that filters self collisions
+                continue
+            _, x_m, y_m = self.dist_to_point(r, angle)
+            if msg.intensities[i] > 0.1:
+                x = int(round(center_x - y_m * pixel_per_meter))
+                y = int(round(center_y - x_m * pixel_per_meter))
+
+                if x >= 0 and x < width and y >= 0 and y < height:
+                    image[y, x] = (255, 255, 255)  # y, x as always
+
+        return image
