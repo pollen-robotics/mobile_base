@@ -336,7 +336,7 @@ class MobileBaseServer(
         img = PilImage.fromarray(self.lidar_img)
 
         buf = io.BytesIO()
-        img.save(buf, format="JPEG")  # Vous pouvez changer le format si nécessaire
+        img.save(buf, format="JPEG")  # Format can be changed as needed
         uncompressed_bytes = buf.getvalue()
         compressed_bytes = zlib.compress(uncompressed_bytes)
         return mobile_base_pb2.LidarMap(data=compressed_bytes)
