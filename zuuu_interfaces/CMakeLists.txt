@@ -33,6 +33,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/IsGoToFinished.srv"
   "srv/GetBatteryVoltage.srv"
   "srv/GetZuuuMode.srv"
+  "srv/GetZuuuSafety.srv"
   "srv/SetZuuuSafety.srv"
 )
 if(BUILD_TESTING)
