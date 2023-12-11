@@ -39,6 +39,8 @@ class LidarSafety:
         self.critical_angles = []
         self.at_least_one_critical = False
         self.logger = logger
+        self.obstacle_detection_status = "green"
+
         # TODO: get zuuu_version from the .reachy.yaml file with the new reachy_utils
         zuuu_version = 1.2
 
