@@ -9,7 +9,6 @@ from typing import List
 from sensor_msgs.msg import LaserScan
 
 from zuuu_hal.utils import angle_diff
-from reachy_utils.config import get_zuuu_version
 
 
 class LidarSafety:
@@ -40,7 +39,10 @@ class LidarSafety:
         self.critical_angles = []
         self.at_least_one_critical = False
         self.logger = logger
-        zuuu_version = get_zuuu_version()
+        self.obstacle_detection_status = "green"
+
+        # TODO: get zuuu_version from the .reachy.yaml file with the new reachy_utils
+        zuuu_version = 1.2
 
         # Not using the TF transforms because this is faster
         # TODO use a static TF2 transform instead
@@ -89,21 +91,40 @@ class LidarSafety:
                 self.unsafe_angles.append(self.create_forbidden_angles(angle, dist))
 
     def safety_check_speed_command(self, x_vel: float, y_vel: float, theta_vel: float) -> List[float]:
-        """Limits the input speed command based on the potential safety hazard"""
+        """Limits the input speed command based on the potential safety hazard
+        Arguments:
+            x_vel {float} -- The desired x speed
+            y_vel {float} -- The desired y speed
+            theta_vel {float} -- The desired theta speed
+
+        Returns:
+            x_vel: float -- The limited x speed command
+            y_vel: float -- The limited y speed command
+            theta_vel: float -- The limited theta speed command
+
+        The method also sets the self.obstacle_detection_status attribute to "green", "orange" or "red".
+            "green" = no obstacle detected,
+            "orange" = obstacle detected but not in the direction we want to go,
+            "red" = obstacle detected in the direction we want to go.
+        """
         if len(self.unsafe_angles) == 0 and len(self.critical_angles) == 0:
             # There are no close obstacles, the speed commands are left untouched
+            self.obstacle_detection_status = "green"
             return x_vel, y_vel, theta_vel
         elif len(self.critical_angles) > 0:
             # Zuuu is very close to an obstacle
             if x_vel == 0.0 and y_vel == 0.0:
                 # A pure rotation is OK but still slowed down
+                self.obstacle_detection_status = "orange"
                 return 0.0, 0.0, theta_vel * self.speed_reduction_factor
             direction = math.atan2(y_vel, x_vel)
             for pair in self.critical_angles:
                 if abs(angle_diff(pair[0], direction)) < pair[1]:
                     # If the direction matches a critical angle, the speed is 0 in x and y
+                    self.obstacle_detection_status = "red"
                     return 0.0, 0.0, theta_vel * self.speed_reduction_factor
             # The direction does not match a critical angle but the speed is still limited
+            self.obstacle_detection_status = "orange"
             return (
                 x_vel * self.speed_reduction_factor,
                 y_vel * self.speed_reduction_factor,
@@ -113,13 +134,16 @@ class LidarSafety:
             # Zuuu is moderately close to an obstacle."
             if x_vel == 0.0 and y_vel == 0.0:
                 # A pure rotation is OK
+                self.obstacle_detection_status = "green"
                 return 0.0, 0.0, theta_vel
             direction = math.atan2(y_vel, x_vel)
             for pair in self.unsafe_angles:
                 if abs(angle_diff(pair[0], direction)) < pair[1]:
                     # If the direction matches an unsafe angle, the speed is reduced
+                    self.obstacle_detection_status = "orange"
                     return x_vel * self.speed_reduction_factor, y_vel * self.speed_reduction_factor, theta_vel
             # The direction does not match an unsafe angle, the speed commands are left untouched
+            self.obstacle_detection_status = "green"
             return x_vel, y_vel, theta_vel
 
     def dist_to_point(self, r: float, angle: float) -> float:

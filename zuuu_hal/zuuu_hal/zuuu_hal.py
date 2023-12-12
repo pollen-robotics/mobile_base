@@ -56,7 +56,6 @@ from zuuu_interfaces.srv import SetSpeed, GetBatteryVoltage, GetZuuuSafety, SetZ
 
 from zuuu_hal.utils import PID, angle_diff, sign
 from zuuu_hal.lidar_safety import LidarSafety
-from reachy_utils.config import get_zuuu_version
 
 
 class ZuuuModes(Enum):
@@ -155,7 +154,9 @@ class ZuuuHAL(Node):
         # self.zuuu_model = check_output(
         #     os.path.expanduser('~')+'/.local/bin/reachy-identify-zuuu-model'
         #     ).strip().decode()
-        self.zuuu_version = get_zuuu_version()
+
+        # TODO: get zuuu_version from the .reachy.yaml file with the new reachy_utils
+        self.zuuu_version = 1.2
         self.get_logger().info(f"zuuu version: {self.zuuu_version}")
         try:
             float_model = float(self.zuuu_version)
@@ -527,6 +528,7 @@ class ZuuuHAL(Node):
         response.safety_on = self.safety_on
         response.safety_distance = self.lidar_safety.safety_distance
         response.critical_distance = self.lidar_safety.critical_distance
+        response.obstacle_detection_status = self.lidar_safety.obstacle_detection_status
         return response
 
     def check_battery(self, verbose: bool = False) -> None:
