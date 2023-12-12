@@ -39,7 +39,7 @@ import rclpy.logging
 from rclpy.node import Node
 import tf_transformations
 from pyvesc.VESC import MultiVESC
-from example_interfaces.msg import Float32
+from std_msgs.msg import Float32
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan, Image
