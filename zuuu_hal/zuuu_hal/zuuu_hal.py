@@ -57,6 +57,8 @@ from zuuu_interfaces.srv import SetSpeed, GetBatteryVoltage, GetZuuuSafety, SetZ
 from zuuu_hal.utils import PID, angle_diff, sign
 from zuuu_hal.lidar_safety import LidarSafety
 
+from reachy_utils.config import ReachyConfig
+
 
 class ZuuuModes(Enum):
     """
@@ -155,8 +157,8 @@ class ZuuuHAL(Node):
         #     os.path.expanduser('~')+'/.local/bin/reachy-identify-zuuu-model'
         #     ).strip().decode()
 
-        # TODO: get zuuu_version from the .reachy.yaml file with the new reachy_utils
-        self.zuuu_version = 1.2
+        reachy_config = ReachyConfig()
+        self.zuuu_version = reachy_config.mobile_base_config['version_hard']
         self.get_logger().info(f"zuuu version: {self.zuuu_version}")
         try:
             float_model = float(self.zuuu_version)
