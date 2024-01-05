@@ -301,6 +301,8 @@ class ZuuuHAL(Node):
         self.pub_back_wheel_rpm = self.create_publisher(Float32, "back_wheel_rpm", 2)
         self.pub_left_wheel_rpm = self.create_publisher(Float32, "left_wheel_rpm", 2)
         self.pub_right_wheel_rpm = self.create_publisher(Float32, "right_wheel_rpm", 2)
+        
+        self.battery_pub = self.create_publisher(Float32, "battery_voltage", 10)
 
         self.pub_odom = self.create_publisher(Odometry, "odom", 2)
 
@@ -962,6 +964,9 @@ class ZuuuHAL(Node):
         # Read success
         self.nb_full_com_fails = 0
         self.measurements_t = time.time()
+        
+        # publish battery voltage
+        self.pub_battery_voltage.publish(self.battery_voltage)
 
     def send_wheel_commands(self, wheel_speeds: List[float]) -> None:
         """Sends either a PWM command or a speed command to the wheel controllers, based on the current control mode"""
