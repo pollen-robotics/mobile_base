@@ -420,6 +420,7 @@ void raw_serial::_init()
     _selfpipe[0] = _selfpipe[1] = -1;
 }
 
+#pragma GCC diagnostic ignored "-Wunused-result"
 void raw_serial::cancelOperation()
 {
     _operation_aborted = true;
