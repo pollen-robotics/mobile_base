@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(zuuu_interfaces)
+project(zuuu_description)
 
 # Default to C99
 if(NOT CMAKE_C_STANDARD)
@@ -21,21 +21,11 @@ find_package(ament_cmake REQUIRED)
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 
-find_package(rosidl_default_generators REQUIRED)
-
-rosidl_generate_interfaces(${PROJECT_NAME}
-  "srv/SetZuuuMode.srv"
-  "srv/ResetOdometry.srv"
-  "srv/GetOdometry.srv"
-  "srv/SetSpeed.srv"
-  "srv/GoToXYTheta.srv"
-  "srv/DistanceToGoal.srv"
-  "srv/IsGoToFinished.srv"
-  "srv/GetBatteryVoltage.srv"
-  "srv/GetZuuuMode.srv"
-  "srv/GetZuuuSafety.srv"
-  "srv/SetZuuuSafety.srv"
+install(
+  DIRECTORY urdf launch rviz config rviz meshes
+  DESTINATION share/${PROJECT_NAME}
 )
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
