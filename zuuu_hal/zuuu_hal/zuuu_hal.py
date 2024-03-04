@@ -1433,15 +1433,15 @@ class ZuuuHAL(Node):
     def main_tick(self, verbose: bool = False):
         """Main function of the HAL node. This function is made to be called often. Handles the main state machine"""
         t = time.time()
-        if (not self.scan_is_read) or ((t - self.scan_t0) > self.scan_timeout):
-            # If too much time without a LIDAR scan, the speeds are set to 0 for safety.
-            self.get_logger().warning(
-                "waiting for a LIDAR scan to be read. Discarding all commands..."
-            )
-            wheel_speeds = self.ik_vel(0.0, 0.0, 0.0)
-            self.send_wheel_commands(wheel_speeds)
-            time.sleep(0.5)
-            return
+        # if (not self.scan_is_read) or ((t - self.scan_t0) > self.scan_timeout):
+        #     # If too much time without a LIDAR scan, the speeds are set to 0 for safety.
+        #     self.get_logger().warning(
+        #         "waiting for a LIDAR scan to be read. Discarding all commands..."
+        #     )
+        #     wheel_speeds = self.ik_vel(0.0, 0.0, 0.0)
+        #     self.send_wheel_commands(wheel_speeds)
+        #     time.sleep(0.5)
+        #     return
         if self.first_tick:
             self.first_tick = False
             self.get_logger().info("=> Zuuu HAL up and running! **")
