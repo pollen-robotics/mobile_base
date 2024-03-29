@@ -51,8 +51,6 @@ from reachy_utils.config import ReachyConfig
 from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import Float32
 from tf2_ros import TransformBroadcaster
-from zuuu_hal.lidar_safety import LidarSafety
-from zuuu_hal.utils import PID, angle_diff, sign
 from zuuu_interfaces.srv import (
     DistanceToGoal,
     GetBatteryVoltage,
@@ -66,6 +64,9 @@ from zuuu_interfaces.srv import (
     SetZuuuMode,
     SetZuuuSafety,
 )
+
+from zuuu_hal.lidar_safety import LidarSafety
+from zuuu_hal.utils import PID, angle_diff, sign
 
 
 class ZuuuModes(Enum):
@@ -331,7 +332,8 @@ class ZuuuHAL(Node):
         self.speed_service_on = False
         self.goto_service_on = False
         self.safety_on = False
-        self.scan_is_read = False
+        # scan_is_read==True is a temporary fix to allow the stack to run without the LIDAR
+        self.scan_is_read = True
         self.scan_timeout = 0.5
         self.nb_control_ticks = 0
         self.stationary_on = False
