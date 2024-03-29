@@ -51,6 +51,8 @@ from reachy_utils.config import ReachyConfig
 from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import Float32
 from tf2_ros import TransformBroadcaster
+from zuuu_hal.lidar_safety import LidarSafety
+from zuuu_hal.utils import PID, angle_diff, sign
 from zuuu_interfaces.srv import (
     DistanceToGoal,
     GetBatteryVoltage,
@@ -64,9 +66,6 @@ from zuuu_interfaces.srv import (
     SetZuuuMode,
     SetZuuuSafety,
 )
-
-from zuuu_hal.lidar_safety import LidarSafety
-from zuuu_hal.utils import PID, angle_diff, sign
 
 
 class ZuuuModes(Enum):
@@ -332,8 +331,7 @@ class ZuuuHAL(Node):
         self.speed_service_on = False
         self.goto_service_on = False
         self.safety_on = False
-        # scan_is_read==True is a temporary fix to allow the stack to run without the LIDAR
-        self.scan_is_read = True
+        self.scan_is_read = False
         self.scan_timeout = 0.5
         self.nb_control_ticks = 0
         self.stationary_on = False
@@ -1435,15 +1433,16 @@ class ZuuuHAL(Node):
     def main_tick(self, verbose: bool = False):
         """Main function of the HAL node. This function is made to be called often. Handles the main state machine"""
         t = time.time()
-        if (not self.scan_is_read) or ((t - self.scan_t0) > self.scan_timeout):
-            # If too much time without a LIDAR scan, the speeds are set to 0 for safety.
-            self.get_logger().warning(
-                "waiting for a LIDAR scan to be read. Discarding all commands..."
-            )
-            wheel_speeds = self.ik_vel(0.0, 0.0, 0.0)
-            self.send_wheel_commands(wheel_speeds)
-            time.sleep(0.5)
-            return
+        # Commenting here is a temporary fix to allow the stack to run without the LIDAR
+        # if (not self.scan_is_read) or ((t - self.scan_t0) > self.scan_timeout):
+        #     # If too much time without a LIDAR scan, the speeds are set to 0 for safety.
+        #     self.get_logger().warning(
+        #         "waiting for a LIDAR scan to be read. Discarding all commands..."
+        #     )
+        #     wheel_speeds = self.ik_vel(0.0, 0.0, 0.0)
+        #     self.send_wheel_commands(wheel_speeds)
+        #     time.sleep(0.5)
+        #     return
         if self.first_tick:
             self.first_tick = False
             self.get_logger().info("=> Zuuu HAL up and running! **")
