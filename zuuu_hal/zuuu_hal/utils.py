@@ -40,6 +40,7 @@ class PID:
 
         self.prev_error = 0
         self.i_contribution = 0
+        self.integral = 0
         self.prev_t = time.time()
 
     def set_goal(self, goal_value: float) -> None:
@@ -51,6 +52,7 @@ class PID:
     def reset(self) -> None:
         """Resets the integral portion, dt and the differential contribution"""
         self.i_contribution = 0
+        self.integral = 0
         self.prev_t = time.time()
         self.prev_error = self.goal_value - self.current_value
 
@@ -89,7 +91,9 @@ class PID:
         else:
             d_contribution = 0.0
 
-        self.i_contribution = self.i_contribution + self.i * error
+        self.integral += error * dt
+        self.i_contribution = self.i * self.integral
+
         self.i_contribution = self.limit(self.i_contribution, self.max_i_contribution)
 
         self.command = p_contribution + self.i_contribution + d_contribution

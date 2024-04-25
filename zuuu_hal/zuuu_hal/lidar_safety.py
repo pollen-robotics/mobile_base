@@ -1,13 +1,13 @@
-import os
 import math
-import numpy as np
+import os
 import traceback
 from subprocess import check_output
 from typing import List
 
-
+import cv2
+import numpy as np
+from reachy_utils.config import ReachyConfig
 from sensor_msgs.msg import LaserScan
-
 from zuuu_hal.utils import angle_diff
 
 
@@ -41,8 +41,8 @@ class LidarSafety:
         self.logger = logger
         self.obstacle_detection_status = "green"
 
-        # TODO: get zuuu_version from the .reachy.yaml file with the new reachy_utils
-        zuuu_version = 1.2
+        reachy_config = ReachyConfig()
+        zuuu_version = reachy_config.mobile_base_config["version_hard"]
 
         # Not using the TF transforms because this is faster
         # TODO use a static TF2 transform instead
@@ -53,7 +53,10 @@ class LidarSafety:
             else:
                 self.x_offset = 0.1815
         except Exception:
-            msg = "ZUUU version can't be processed, check that the 'zuuu_version' tag is " "present in the .reachy.yaml file"
+            msg = (
+                "ZUUU version can't be processed, check that the 'zuuu_model' tag is "
+                "present in the .reachy.yaml file"
+            )
             self.logger.error(msg)
             self.logger.error(traceback.format_exc())
             raise RuntimeError(msg)
@@ -90,7 +93,9 @@ class LidarSafety:
             elif dist < self.safety_distance and (msg.intensities[i] > 0.1):
                 self.unsafe_angles.append(self.create_forbidden_angles(angle, dist))
 
-    def safety_check_speed_command(self, x_vel: float, y_vel: float, theta_vel: float) -> List[float]:
+    def safety_check_speed_command(
+        self, x_vel: float, y_vel: float, theta_vel: float
+    ) -> List[float]:
         """Limits the input speed command based on the potential safety hazard
         Arguments:
             x_vel {float} -- The desired x speed
@@ -141,14 +146,19 @@ class LidarSafety:
                 if abs(angle_diff(pair[0], direction)) < pair[1]:
                     # If the direction matches an unsafe angle, the speed is reduced
                     self.obstacle_detection_status = "orange"
-                    return x_vel * self.speed_reduction_factor, y_vel * self.speed_reduction_factor, theta_vel
+                    return (
+                        x_vel * self.speed_reduction_factor,
+                        y_vel * self.speed_reduction_factor,
+                        theta_vel,
+                    )
             # The direction does not match an unsafe angle, the speed commands are left untouched
             self.obstacle_detection_status = "green"
             return x_vel, y_vel, theta_vel
 
     def dist_to_point(self, r: float, angle: float) -> float:
         """Calculates the distance between a LIDAR point and the center of the robot.
-        To do this the frame of the point is changed from the LIDAR frame to the base_footprint frame."""
+        To do this the frame of the point is changed from the LIDAR frame to the base_footprint frame.
+        """
         x = r * math.cos(angle)
         y = r * math.sin(angle)
 
@@ -158,7 +168,8 @@ class LidarSafety:
 
     def create_forbidden_angles(self, angle: float, dist: float) -> List[float]:
         """Creates a pair [angle, half_forbidden_angle_span].
-        This represents the direction span that could be dangerous based on a LIDAR input"""
+        This represents the direction span that could be dangerous based on a LIDAR input
+        """
         # Half of the forbidden angle span
         beta = abs(math.atan2(self.robot_collision_radius, dist))
         return [angle, beta]
@@ -173,10 +184,10 @@ class LidarSafety:
         width = image_size
         image = np.zeros((height, width, 3), np.uint8)
         center_x = int(round(width / 2))
-        center_y = int(round(height/2))
+        center_y = int(round(height / 2))
 
         for i, r in enumerate(msg.ranges):
-            angle = msg.angle_min + i*msg.angle_increment
+            angle = msg.angle_min + i * msg.angle_increment
             if r < 0.01:
                 # Code value for "no detection". e.g. the lidar filter that filters self collisions
                 continue
