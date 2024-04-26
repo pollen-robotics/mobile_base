@@ -157,7 +157,6 @@ class MobileBase:
             sum += i
         return sum / float(len)
 
-
 class ZuuuHAL(Node):
     """Zuuu's Hardware Abstraction Layer node"""
 
@@ -171,7 +170,8 @@ class ZuuuHAL(Node):
         # self.zuuu_model = check_output(
         #     os.path.expanduser('~')+'/.local/bin/reachy-identify-zuuu-model'
         #     ).strip().decode()
-
+        self.nb_full_com_fails = 0
+        self.max_full_com_fails = 100
         reachy_config = ReachyConfig()
         self.zuuu_version = reachy_config.mobile_base_config["version_hard"]
         self.get_logger().info(f"zuuu version: {self.zuuu_version}")
@@ -327,7 +327,6 @@ class ZuuuHAL(Node):
         self.scan_timeout = 0.5
         self.nb_control_ticks = 0
         self.stationary_on = False
-        self.nb_full_com_fails = 0
         self.lidar_safety = LidarSafety(
             self.safety_distance,
             self.critical_distance,
