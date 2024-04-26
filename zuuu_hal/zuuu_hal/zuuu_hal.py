@@ -51,21 +51,13 @@ from reachy_utils.config import ReachyConfig
 from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import Float32
 from tf2_ros import TransformBroadcaster
+from zuuu_interfaces.srv import (DistanceToGoal, GetBatteryVoltage,
+                                 GetOdometry, GetZuuuMode, GetZuuuSafety,
+                                 GoToXYTheta, IsGoToFinished, ResetOdometry,
+                                 SetSpeed, SetZuuuMode, SetZuuuSafety)
+
 from zuuu_hal.lidar_safety import LidarSafety
 from zuuu_hal.utils import PID, angle_diff, sign
-from zuuu_interfaces.srv import (
-    DistanceToGoal,
-    GetBatteryVoltage,
-    GetOdometry,
-    GetZuuuMode,
-    GetZuuuSafety,
-    GoToXYTheta,
-    IsGoToFinished,
-    ResetOdometry,
-    SetSpeed,
-    SetZuuuMode,
-    SetZuuuSafety,
-)
 
 
 class ZuuuModes(Enum):
@@ -335,6 +327,7 @@ class ZuuuHAL(Node):
         self.scan_timeout = 0.5
         self.nb_control_ticks = 0
         self.stationary_on = False
+        self.nb_full_com_fails = 0
         self.lidar_safety = LidarSafety(
             self.safety_distance,
             self.critical_distance,
