@@ -49,7 +49,7 @@ from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from reachy_utils.config import ReachyConfig
 from sensor_msgs.msg import Image, LaserScan
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Float32MultiArray
 from tf2_ros import TransformBroadcaster
 from zuuu_hal.lidar_safety import LidarSafety
 from zuuu_hal.utils import PID, angle_diff, sign
@@ -381,6 +381,11 @@ class ZuuuHAL(Node):
         self.pub_left_wheel_rpm = self.create_publisher(Float32, "left_wheel_rpm", 2)
         self.pub_right_wheel_rpm = self.create_publisher(Float32, "right_wheel_rpm", 2)
 
+        # battery voltage publisher replacin the old service `GetBatteryVoltage`
+        self.pub_battery_voltage = self.create_publisher(Float32, "mobile_base_battery_voltage", 2)
+        # distance to goal publisher replacing the old service `DistanceToGoal`
+        self.pub_safety_status = self.create_publisher(Float32MultiArray, "mobile_base_safety_status", 2)
+
         self.pub_odom = self.create_publisher(Odometry, "odom", 2)
 
         self.mode_service = self.create_service(
@@ -416,6 +421,8 @@ class ZuuuHAL(Node):
             DistanceToGoal, "DistanceToGoal", self.handle_distance_to_goal
         )
 
+        # this is deprecated - the publisher is used instead
+        # leaving for now for compatibility
         self.get_battery_voltage_service = self.create_service(
             GetBatteryVoltage, "GetBatteryVoltage", self.handle_get_battery_voltage
         )
@@ -424,6 +431,8 @@ class ZuuuHAL(Node):
             SetZuuuSafety, "SetZuuuSafety", self.handle_zuuu_set_safety
         )
 
+        # this is deprecated - the publisher is used instead
+        # leaving for now for compatibility
         self.get_safety_service = self.create_service(
             GetZuuuSafety, "GetZuuuSafety", self.handle_zuuu_get_safety
         )
@@ -640,6 +649,8 @@ class ZuuuHAL(Node):
         )
         return response
 
+    # deprecated - replaced by the publisher
+    # it can still be called but the publisher is used with MobileBasse.GetState
     def handle_get_battery_voltage(
         self, request: GetBatteryVoltage.Request, response: GetBatteryVoltage.Response
     ) -> GetBatteryVoltage.Response:
@@ -660,6 +671,8 @@ class ZuuuHAL(Node):
         response.success = True
         return response
 
+    # deprecated - replaced by the publisher
+    # it can still be called but the publisher is used with MobileBasse.GetState
     def handle_zuuu_get_safety(
         self, request: GetZuuuSafety.Request, response: GetZuuuSafety.Response
     ) -> GetZuuuSafety.Response:
@@ -669,6 +682,29 @@ class ZuuuHAL(Node):
         response.critical_distance = self.lidar_safety.critical_distance
         response.obstacle_detection_status = self.lidar_safety.obstacle_detection_status
         return response
+
+    def publish_safety_status(self) -> None:
+        """Publishes the safety status to the topic"""
+        msg = Float32MultiArray()
+        string_status = self.lidar_safety.obstacle_detection_status
+
+        # string to float conversion using the mobile_base_lidar.proto file
+        status = 0 # no object detected (DETECTION_ERROR)
+        if string_status == "green":
+            status = 1.0 # no object detected (NO_OBJECT_DETECTED)
+        elif string_status == "orange":
+            status = 1.0 # object detected but not critical (OBJECT_DETECTED_SLOWDOWN)
+        elif string_status == "red":
+            status = 2.0 # object detected and critical (OBJECT_DETECTED_STOP)
+
+        # construct the Float32MultiArray message
+        msg.data = [
+            self.safety_on,
+            self.lidar_safety.safety_distance,
+            self.lidar_safety.critical_distance,
+            status,
+        ]
+        self.pub_safety_status.publish(msg)
 
     def check_battery(self, verbose: bool = False) -> None:
         """Checks that the battery readings are not too old and forces a read if need be.
@@ -689,6 +725,9 @@ class ZuuuHAL(Node):
             self.omnibase.battery_nb_cells * self.omnibase.battery_cell_min_voltage
         )
         voltage = self.battery_voltage
+
+        ## publish battery voltage
+        self.pub_battery_voltage.publish(Float32(data=voltage))
 
         if min_voltage < voltage < warn_voltage:
             self.get_logger().warning(
@@ -1581,6 +1620,9 @@ class ZuuuHAL(Node):
             self.print_all_measurements()
 
         self.publish_wheel_speeds()
+        # publish the safety status 
+        # the safety status is published in the `mobile_base_safety_status` topic
+        self.publish_safety_status()
         self.tick_odom()
 
         if verbose:
