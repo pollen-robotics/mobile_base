@@ -726,9 +726,6 @@ class ZuuuHAL(Node):
         )
         voltage = self.battery_voltage
 
-        ## publish battery voltage
-        self.pub_battery_voltage.publish(Float32(data=voltage))
-
         if min_voltage < voltage < warn_voltage:
             self.get_logger().warning(
                 "Battery voltage LOW ({}V). Consider recharging. Warning threshold: {:.1f}V, "
@@ -1620,11 +1617,14 @@ class ZuuuHAL(Node):
             self.print_all_measurements()
 
         self.publish_wheel_speeds()
+        self.tick_odom()
         # publish the safety status 
         # the safety status is published in the `mobile_base_safety_status` topic
         self.publish_safety_status()
-        self.tick_odom()
-
+        ## publish battery voltage
+        self.pub_battery_voltage.publish(Float32(data=self.battery_voltage))
+        
+        
         if verbose:
             self.get_logger().info(
                 "x_odom {}, y_odom {}, theta_odom {}".format(
