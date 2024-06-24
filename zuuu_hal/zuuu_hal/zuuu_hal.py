@@ -51,10 +51,19 @@ from reachy_utils.config import ReachyConfig
 from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import Float32, Float32MultiArray
 from tf2_ros import TransformBroadcaster
-from zuuu_interfaces.srv import (DistanceToGoal, GetBatteryVoltage,
-                                 GetOdometry, GetZuuuMode, GetZuuuSafety,
-                                 GoToXYTheta, IsGoToFinished, ResetOdometry,
-                                 SetSpeed, SetZuuuMode, SetZuuuSafety)
+from zuuu_interfaces.srv import (
+    DistanceToGoal,
+    GetBatteryVoltage,
+    GetOdometry,
+    GetZuuuMode,
+    GetZuuuSafety,
+    GoToXYTheta,
+    IsGoToFinished,
+    ResetOdometry,
+    SetSpeed,
+    SetZuuuMode,
+    SetZuuuSafety,
+)
 
 from zuuu_hal.lidar_safety import LidarSafety
 from zuuu_hal.utils import PID, angle_diff, sign
@@ -162,7 +171,9 @@ class ZuuuHAL(Node):
     def __init__(self) -> None:
         """Node initialisation.
         ROS side: setup of the timers, callbacks, topics, services and parameters.
-        Low level side: connecting with the hardware and making a first read of the sensors
+        Low level side: connecting with the hardware and making a first read of the sensors.
+        Some interfaces are doubled and can be accessed through services or topics.
+        The topic interface is to be prefered when used at a high frequence as rclpy services can be too slow.
         """
         super().__init__("zuuu_hal")
         self.get_logger().info("Starting zuuu_hal!")
@@ -354,16 +365,12 @@ class ZuuuHAL(Node):
 
         self.distance_to_goal = self.create_service(DistanceToGoal, "DistanceToGoal", self.handle_distance_to_goal)
 
-        # this is deprecated - the publisher is used instead
-        # leaving for now for compatibility
         self.get_battery_voltage_service = self.create_service(
             GetBatteryVoltage, "GetBatteryVoltage", self.handle_get_battery_voltage
         )
 
         self.set_safety_service = self.create_service(SetZuuuSafety, "SetZuuuSafety", self.handle_zuuu_set_safety)
 
-        # this is deprecated - the publisher is used instead
-        # leaving for now for compatibility
         self.get_safety_service = self.create_service(GetZuuuSafety, "GetZuuuSafety", self.handle_zuuu_get_safety)
 
         # Initialize the transform broadcaster
@@ -558,8 +565,6 @@ class ZuuuHAL(Node):
         response.distance = math.sqrt((self.x_goal - self.x_odom) ** 2 + (self.y_goal - self.y_odom) ** 2)
         return response
 
-    # deprecated - replaced by the publisher
-    # it can still be called but the publisher is used with MobileBasse.GetState
     def handle_get_battery_voltage(
         self, request: GetBatteryVoltage.Request, response: GetBatteryVoltage.Response
     ) -> GetBatteryVoltage.Response:
@@ -580,8 +585,6 @@ class ZuuuHAL(Node):
         response.success = True
         return response
 
-    # deprecated - replaced by the publisher
-    # it can still be called but the publisher is used with MobileBasse.GetState
     def handle_zuuu_get_safety(
         self, request: GetZuuuSafety.Request, response: GetZuuuSafety.Response
     ) -> GetZuuuSafety.Response:
