@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 from reachy_utils.config import ReachyConfig
 from sensor_msgs.msg import LaserScan
+
 from zuuu_hal.utils import angle_diff
 
 
@@ -53,10 +54,7 @@ class LidarSafety:
             else:
                 self.x_offset = 0.1815
         except Exception:
-            msg = (
-                "ZUUU version can't be processed, check that the 'zuuu_model' tag is "
-                "present in the .reachy.yaml file"
-            )
+            msg = "ZUUU version can't be processed, check that the 'zuuu_model' tag is " "present in the .reachy.yaml file"
             self.logger.error(msg)
             self.logger.error(traceback.format_exc())
             raise RuntimeError(msg)
@@ -93,9 +91,7 @@ class LidarSafety:
             elif dist < self.safety_distance and (msg.intensities[i] > 0.1):
                 self.unsafe_angles.append(self.create_forbidden_angles(angle, dist))
 
-    def safety_check_speed_command(
-        self, x_vel: float, y_vel: float, theta_vel: float
-    ) -> List[float]:
+    def safety_check_speed_command(self, x_vel: float, y_vel: float, theta_vel: float) -> List[float]:
         """Limits the input speed command based on the potential safety hazard
         Arguments:
             x_vel {float} -- The desired x speed
