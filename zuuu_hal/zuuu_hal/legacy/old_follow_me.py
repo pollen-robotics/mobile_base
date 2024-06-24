@@ -1,15 +1,16 @@
-import rclpy
-from rclpy.node import Node
-import pygame
-import time
 import math
-import numpy as np
-import traceback
 import sys
-from pyvesc.VESC import MultiVESC
-from sensor_msgs.msg import LaserScan
-from rclpy.qos import ReliabilityPolicy, QoSProfile
+import time
+import traceback
+
 import cv2
+import numpy as np
+import pygame
+import rclpy
+from pyvesc.VESC import MultiVESC
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy
+from sensor_msgs.msg import LaserScan
 
 """ 
 TODO: 
