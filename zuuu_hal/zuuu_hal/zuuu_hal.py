@@ -301,7 +301,7 @@ class ZuuuHAL(Node):
             self.safety_distance,
             self.critical_distance,
             robot_collision_radius=0.5,
-            speed_reduction_factor=0.88,
+            speed_reduction_factor=1.0,
             logger=self.get_logger(),
         )
         self.cv_bridge = CvBridge()
