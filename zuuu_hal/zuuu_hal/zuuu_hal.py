@@ -292,7 +292,7 @@ class ZuuuHAL(Node):
         self.speed_service_deadline = 0
         self.speed_service_on = False
         self.goto_service_on = False
-        self.safety_on = False
+        self.safety_on = True
         self.scan_is_read = False
         self.scan_timeout = 0.5
         self.nb_control_ticks = 0
@@ -301,7 +301,7 @@ class ZuuuHAL(Node):
             self.safety_distance,
             self.critical_distance,
             robot_collision_radius=0.5,
-            speed_reduction_factor=0.88,
+            speed_reduction_factor=1.0,
             logger=self.get_logger(),
         )
         self.cv_bridge = CvBridge()
