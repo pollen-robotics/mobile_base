@@ -343,7 +343,7 @@ class ZuuuHAL(Node):
         self.pub_right_wheel_rpm = self.create_publisher(Float32, "right_wheel_rpm", 2)
 
         # distance to goal publisher replacing the old service `DistanceToGoal`
-        self.pub_mobile_base_state = self.create_publisher(Float32MultiArray, "mobile_base_state", 2)
+        self.pub_mobile_base_state = self.create_publisher(MobileBaseState, "mobile_base_state", 2)
 
         self.pub_odom = self.create_publisher(Odometry, "odom", 2)
 
