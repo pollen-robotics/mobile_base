@@ -50,6 +50,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy
 from reachy_utils.config import ReachyConfig
 from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import Float32, Float32MultiArray
+from pollen_msgs.msg import MobileBaseState
 from tf2_ros import TransformBroadcaster
 from zuuu_interfaces.srv import (
     DistanceToGoal,
@@ -341,10 +342,8 @@ class ZuuuHAL(Node):
         self.pub_left_wheel_rpm = self.create_publisher(Float32, "left_wheel_rpm", 2)
         self.pub_right_wheel_rpm = self.create_publisher(Float32, "right_wheel_rpm", 2)
 
-        # battery voltage publisher replacin the old service `GetBatteryVoltage`
-        self.pub_battery_voltage = self.create_publisher(Float32, "mobile_base_battery_voltage", 2)
         # distance to goal publisher replacing the old service `DistanceToGoal`
-        self.pub_safety_status = self.create_publisher(Float32MultiArray, "mobile_base_safety_status", 2)
+        self.pub_mobile_base_state = self.create_publisher(MobileBaseState, "mobile_base_state", 2)
 
         self.pub_odom = self.create_publisher(Odometry, "odom", 2)
 
@@ -595,9 +594,9 @@ class ZuuuHAL(Node):
         response.obstacle_detection_status = self.lidar_safety.obstacle_detection_status
         return response
 
-    def publish_safety_status(self) -> None:
+    def publish_mobile_base_state(self) -> None:
         """Publishes the safety status to the topic"""
-        msg = Float32MultiArray()
+        msg = MobileBaseState()
         string_status = self.lidar_safety.obstacle_detection_status
 
         # string to float conversion using the mobile_base_lidar.proto file
@@ -610,13 +609,19 @@ class ZuuuHAL(Node):
             status = 2.0  # object detected and critical (OBJECT_DETECTED_STOP)
 
         # construct the Float32MultiArray message
-        msg.data = [
+        msg.mobile_base_safety_status.data = [
             self.safety_on,
             self.lidar_safety.safety_distance,
             self.lidar_safety.critical_distance,
             status,
         ]
-        self.pub_safety_status.publish(msg)
+
+        msg.battery_voltage = Float32(data=self.battery_voltage)
+
+        msg.zuuu_mode = self.mode.name
+        msg.control_mode = self.control_mode.name
+
+        self.pub_mobile_base_state.publish(msg)
 
     def check_battery(self, verbose: bool = False) -> None:
         """Checks that the battery readings are not too old and forces a read if need be.
@@ -1448,9 +1453,7 @@ class ZuuuHAL(Node):
         self.tick_odom()
         # publish the safety status
         # the safety status is published in the `mobile_base_safety_status` topic
-        self.publish_safety_status()
-        ## publish battery voltage
-        self.pub_battery_voltage.publish(Float32(data=self.battery_voltage))
+        self.publish_mobile_base_state()
 
         if verbose:
             self.get_logger().info("x_odom {}, y_odom {}, theta_odom {}".format(self.x_odom, self.y_odom, self.theta_odom))
