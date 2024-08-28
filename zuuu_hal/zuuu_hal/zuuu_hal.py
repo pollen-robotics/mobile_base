@@ -513,6 +513,9 @@ class ZuuuHAL(Node):
         response.x = self.x_odom
         response.y = self.y_odom
         response.theta = self.theta_odom
+        response.vx = self.vx
+        response.vy = self.vy
+        response.vtheta = self.vtheta
         return response
 
     def handle_set_speed(self, request: SetSpeed.Request, response: SetSpeed.Response) -> SetSpeed.Response:
