@@ -187,17 +187,18 @@ class ZuuuHAL(Node):
         self.get_logger().info(f"zuuu version: {self.zuuu_version}")
         try:
             float_model = float(self.zuuu_version)
-            if float_model < 1.0:
-                self.omnibase = MobileBase(left_wheel_id=24, right_wheel_id=72, back_wheel_id=None)
-            elif float_model < 1.2:
-                self.omnibase = MobileBase(left_wheel_id=24, right_wheel_id=None, back_wheel_id=116)
-            else:
-                self.omnibase = MobileBase(left_wheel_id=None, right_wheel_id=72, back_wheel_id=116)
         except Exception:
             msg = "ZUUU version can't be processed, check that the 'zuuu_version' tag is " "present in the .reachy.yaml file"
             self.get_logger().error(msg)
             self.get_logger().error(traceback.format_exc())
             raise RuntimeError(msg)
+        if float_model < 1.0:
+            self.omnibase = MobileBase(left_wheel_id=24, right_wheel_id=72, back_wheel_id=None)
+        elif float_model < 1.2:
+            self.omnibase = MobileBase(left_wheel_id=24, right_wheel_id=None, back_wheel_id=116)
+        else:
+            self.omnibase = MobileBase(left_wheel_id=None, right_wheel_id=72, back_wheel_id=116)
+        
 
         self.get_logger().info("Reading Zuuu's sensors once...")
         self.read_measurements()
@@ -611,9 +612,9 @@ class ZuuuHAL(Node):
         elif string_status == "red":
             status = 2.0  # object detected and critical (OBJECT_DETECTED_STOP)
 
+        msg.safety_on.data = self.safety_on
         # construct the Float32MultiArray message
         msg.mobile_base_safety_status.data = [
-            self.safety_on,
             self.lidar_safety.safety_distance,
             self.lidar_safety.critical_distance,
             status,
