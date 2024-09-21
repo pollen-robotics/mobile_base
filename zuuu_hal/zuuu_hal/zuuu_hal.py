@@ -110,20 +110,24 @@ class MobileBase:
         left_wheel_id: int = 24,
         right_wheel_id: int = 72,
         back_wheel_id: int = 116,
+        fake_hardware: bool = False,
     ) -> None:
         params = [
             {"can_id": left_wheel_id, "has_sensor": True, "start_heartbeat": True},
             {"can_id": right_wheel_id, "has_sensor": True, "start_heartbeat": True},
             {"can_id": back_wheel_id, "has_sensor": True, "start_heartbeat": True},
         ]
-        self._multi_vesc = MultiVESC(serial_port=serial_port, vescs_params=params)
+        self.fake_hardware = fake_hardware
+        if not self.fake_hardware:
+            self._multi_vesc = MultiVESC(serial_port=serial_port, vescs_params=params)
 
         self.left_wheel, self.right_wheel, self.back_wheel = self._multi_vesc.controllers
+        init_measurements_value = "No measurements in fake_hardware mode" if fake_hardware else None
         (
             self.left_wheel_measurements,
             self.right_wheel_measurements,
             self.back_wheel_measurements,
-        ) = (None, None, None)
+        ) = (init_measurements_value, init_measurements_value, init_measurements_value)
         self.left_wheel_nones, self.right_wheel_nones, self.back_wheel_nones = 0, 0, 0
         self.wheel_radius = 0.21 / 2.0
         self.wheel_to_center = 0.19588  # 0.188
@@ -153,6 +157,8 @@ class MobileBase:
 
     def read_all_measurements(self) -> None:
         """Reads all the measurements for the left, right and back wheels"""
+        if self.fake_hardware:
+            return
         self.left_wheel_measurements = self.left_wheel.get_measurements()
         self.right_wheel_measurements = self.right_wheel.get_measurements()
         self.back_wheel_measurements = self.back_wheel.get_measurements()
@@ -181,23 +187,31 @@ class ZuuuHAL(Node):
         # self.zuuu_model = check_output(
         #     os.path.expanduser('~')+'/.local/bin/reachy-identify-zuuu-model'
         #     ).strip().decode()
-
-        reachy_config = ReachyConfig()
-        self.zuuu_version = reachy_config.mobile_base_config["version_hard"]
-        self.get_logger().info(f"zuuu version: {self.zuuu_version}")
-        try:
-            float_model = float(self.zuuu_version)
-        except Exception:
-            msg = "ZUUU version can't be processed, check that the 'zuuu_version' tag is " "present in the .reachy.yaml file"
-            self.get_logger().error(msg)
-            self.get_logger().error(traceback.format_exc())
-            raise RuntimeError(msg)
-        if float_model < 1.0:
-            self.omnibase = MobileBase(left_wheel_id=24, right_wheel_id=72, back_wheel_id=None)
-        elif float_model < 1.2:
-            self.omnibase = MobileBase(left_wheel_id=24, right_wheel_id=None, back_wheel_id=116)
+        
+        self.declare_parameter('fake_hardware', False)
+        self.fake_hardware = self.get_parameter('fake_hardware').value
+        if self.fake_hardware:
+            self.get_logger().info("Running zuuu_hal in fake hardware mode")
+            self.omnibase = MobileBase(left_wheel_id=None, right_wheel_id=None, back_wheel_id=None, fake_hardware=True)
+            
         else:
-            self.omnibase = MobileBase(left_wheel_id=None, right_wheel_id=72, back_wheel_id=116)
+            self.get_logger().info("Running zuuu_hal on physical hardware")
+            reachy_config = ReachyConfig()
+            self.zuuu_version = reachy_config.mobile_base_config["version_hard"]
+            self.get_logger().info(f"zuuu version: {self.zuuu_version}")
+            try:
+                float_model = float(self.zuuu_version)
+            except Exception:
+                msg = "ZUUU version can't be processed, check that the 'zuuu_version' tag is " "present in the .reachy.yaml file"
+                self.get_logger().error(msg)
+                self.get_logger().error(traceback.format_exc())
+                raise RuntimeError(msg)
+            if float_model < 1.0:
+                self.omnibase = MobileBase(left_wheel_id=24, right_wheel_id=72, back_wheel_id=None)
+            elif float_model < 1.2:
+                self.omnibase = MobileBase(left_wheel_id=24, right_wheel_id=None, back_wheel_id=116)
+            else:
+                self.omnibase = MobileBase(left_wheel_id=None, right_wheel_id=72, back_wheel_id=116)
         
 
         self.get_logger().info("Reading Zuuu's sensors once...")
@@ -226,7 +240,7 @@ class ZuuuHAL(Node):
         )
         self.add_on_set_parameters_callback(self.parameters_callback)
 
-        # Maing sure we don't run the node if the config file is not shared
+        # Making sure we don't run the node if the config file is not shared
         if self.get_parameter("max_duty_cyle").type_ is Parameter.Type.NOT_SET:
             self.get_logger().error(
                 "Parameter 'max_duty_cyle' was not initialized. Check that the param file is given to the node"
@@ -978,11 +992,11 @@ class ZuuuHAL(Node):
 
     def tick_odom(self) -> None:
         """Updates the odometry values based on the small displacement measured since the last tick,
-        then published the results with publish_odometry_and_tf()
+        then publishes the results with publish_odometry_and_tf()
         """
-        # TODO VESC speed values are, as is normal, very noisy at low speeds.
+        # Note: VESC speed values are, as is normal, very noisy at low speeds.
         # We have no control on how the speeds are calculated as is.
-        # -> By reading the encoder ticks directly and making the calculations here we could make this a tad better.
+        # -> By reading the encoder ticks directly and making the calculations here we could maybe make this a tad better?
 
         # Local speeds in egocentric frame.
         # "rpm" are actually erpm and need to be divided by half the amount of magnetic poles to get the actual rpm.
@@ -1475,6 +1489,7 @@ class ZuuuHAL(Node):
 def main(args=None) -> None:
     """Run ZuuuHAL main loop"""
     rclpy.init(args=args)
+    
     try:
         node = ZuuuHAL()
     except Exception:
