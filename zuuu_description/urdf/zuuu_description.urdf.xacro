@@ -42,44 +42,6 @@
       </inertial>
     </xacro:macro>
 
-    <!-- Robot Footprint -->
-    <link name="base_footprint" />
-
-    <joint name="base_footprint_joint" type="fixed">
-      <origin rpy="0 0 0" xyz="0 0 0" />
-      <axis xyz="0 0 ${(base_top_height-base_depth/2)}" />
-      <!-- <joint_properties damping="${global_damping}" friction="${global_friction}"/> -->
-      <parent link="base_footprint" />
-      <child link="base_link" />
-    </joint>
-
-    <!-- Robot Base -->
-    <link name="base_link">
-      <!-- <visual>
-        <geometry>
-          <cylinder radius="${base_radius}" length="${base_depth}"/>
-        </geometry>
-        <material name="Cyan">
-          <color rgba="0 1.0 1.0 1.0"/>
-        </material>
-      </visual> -->
-
-      <visual>
-        <origin xyz="0 0 ${(-base_top_height+base_depth/2)}" rpy="0 0 0" />
-        <geometry>
-          <mesh filename="file://$(find zuuu_description)/meshes/reachy_mobile_pauvre.dae" />
-        </geometry>
-      </visual>
-
-      <collision>
-        <geometry>
-          <cylinder radius="${base_radius}" length="${base_depth}" />
-        </geometry>
-      </collision>
-
-      <xacro:cylinder_inertia m="20" r="${base_radius}" h="${base_depth}" />
-    </link>
-
 
     <!-- Wheels -->
     <xacro:macro name="wheel" params="prefix yaw_angle">
