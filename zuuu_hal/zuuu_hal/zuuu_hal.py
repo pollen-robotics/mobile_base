@@ -190,7 +190,6 @@ class ZuuuHAL(Node):
         
         self.declare_parameter('fake_hardware', False)
         self.fake_hardware = self.get_parameter('fake_hardware').value
-        self.get_logger().error("ZUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU\nUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU")
         
         if self.fake_hardware:
             self.get_logger().info("Running zuuu_hal in fake hardware mode. TODO.")
