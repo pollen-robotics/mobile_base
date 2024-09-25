@@ -194,7 +194,7 @@ class ZuuuHAL(Node):
         if self.fake_hardware:
             self.get_logger().info("Running zuuu_hal in fake hardware mode. TODO.")
             return
-            self.omnibase = MobileBase(left_wheel_id=None, right_wheel_id=None, back_wheel_id=None, fake_hardware=True)
+            # self.omnibase = MobileBase(left_wheel_id=None, right_wheel_id=None, back_wheel_id=None, fake_hardware=True)
             
         else:
             self.get_logger().info("Running zuuu_hal on physical hardware")
