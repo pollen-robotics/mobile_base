@@ -154,13 +154,19 @@
         </geometry>
         <xacro:reachy_grey/>
       </visual>
-
-      <collision>
+      <!-- Real collision -->
+      <!-- <collision>
         <origin xyz="0 0 0.145" rpy="0 0 0"/>
         <geometry>
           <cylinder radius="0.245" length="0.19"/>
         </geometry>
-    
+      </collision> -->
+      <!-- exagerated collision to avoid the mobile base sliding on Gazebo -->
+      <collision>
+        <origin xyz="0 0 0.12" rpy="0 0 0"/>
+        <geometry>
+          <cylinder radius="0.245" length="0.24"/>
+        </geometry>
       </collision>
     
       <inertial>
