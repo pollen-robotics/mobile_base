@@ -80,7 +80,6 @@ class ZuuuModes(Enum):
     GOTO =  Mode used by the go_to_xytheta service to do position control in odom frame
     EMERGENCY_STOP =  Calls the emergency_shutdown method
     """
-
     CMD_VEL = 1
     BRAKE = 2
     FREE_WHEEL = 3
@@ -88,6 +87,16 @@ class ZuuuModes(Enum):
     GOTO = 5
     EMERGENCY_STOP = 6
     CMD_GOTO = 7
+    
+    @classmethod
+    def speed_modes(cls):
+        """Returns a list of modes considered as speed modes."""
+        return [cls.CMD_VEL, cls.SPEED, cls.GOTO, cls.CMD_GOTO]
+
+    @classmethod
+    def stop_modes(cls):
+        """Returns a list of modes considered as stop modes."""
+        return [cls.BRAKE, cls.FREE_WHEEL, cls.EMERGENCY_STOP]
 
 
 class ZuuuControlModes(Enum):
@@ -99,6 +108,10 @@ class ZuuuControlModes(Enum):
 
     OPEN_LOOP = 1
     PID = 2
+
+# CMD_VEL, SPEED, GOTO and CMD_GOTO should be in a SPEED_MODES group
+# BRAKE, FREE_WHEEL and EMERGENCY_STOP should be in a STOP_MODES group
+
 
 
 class MobileBase:
@@ -828,27 +841,19 @@ class ZuuuHAL(Node):
 
         return [x_vel, y_vel, theta_vel]
 
-    def filter_speed_goals(self):
-        """Applies a smoothing filter on x_vel_goal, y_vel_goal and theta_vel_goal"""
-        self.x_vel_goal_filtered = (self.x_vel_goal + self.smoothing_factor * self.x_vel_goal_filtered) / (
+    def filter_speed_goals(self, x_vel, y_vel, theta_vel):
+        """Applies a smoothing filter"""
+        self.x_vel_goal_filtered = (x_vel + self.smoothing_factor * self.x_vel_goal_filtered) / (
             1 + self.smoothing_factor
         )
-        self.y_vel_goal_filtered = (self.y_vel_goal + self.smoothing_factor * self.y_vel_goal_filtered) / (
+        self.y_vel_goal_filtered = (y_vel + self.smoothing_factor * self.y_vel_goal_filtered) / (
             1 + self.smoothing_factor
         )
-        self.theta_vel_goal_filtered = (self.theta_vel_goal + self.smoothing_factor * self.theta_vel_goal_filtered) / (
+        self.theta_vel_goal_filtered = (theta_vel + self.smoothing_factor * self.theta_vel_goal_filtered) / (
             1 + self.smoothing_factor
         )
+        return self.x_vel_goal_filtered, self.y_vel_goal_filtered, self.theta_vel_goal_filtered
 
-        (
-            self.x_vel_goal_filtered,
-            self.y_vel_goal_filtered,
-            self.theta_vel_goal_filtered,
-        ) = self.lidar_safety.safety_check_speed_command(
-            self.x_vel_goal_filtered,
-            self.y_vel_goal_filtered,
-            self.theta_vel_goal_filtered,
-        )
 
     def format_measurements(self, measurements) -> str:
         """Text formatting for the low level controller measurements"""
@@ -899,7 +904,7 @@ class ZuuuHAL(Node):
         # 20 tours en 35s, avg_rpm ~=34
 
     def publish_wheel_speeds(self) -> None:
-        """Publishes the most recent measure of rotational speed for each of the 3 wheels on 3 separate topics."""
+        """Publishes the most recent measures of rotational speed for each of the 3 wheels on 3 separate topics."""
         # If the measurements are None, not publishing
         if self.omnibase.back_wheel_measurements is not None:
             rpm_back = Float32()
@@ -1340,12 +1345,177 @@ class ZuuuHAL(Node):
         self.x_pid.set_goal(self.x_goal)
         self.y_pid.set_goal(self.y_goal)
         self.theta_pid.set_goal(self.theta_goal)
+    
+    def goto_tick(self):
+        x_vel, y_vel, theta_vel = 0, 0, 0
+        if self.goto_service_on:
+            distance = math.sqrt((self.x_goal - self.x_odom) ** 2 + (self.y_goal - self.y_odom) ** 2)
+            if distance < self.xy_tol and abs(angle_diff(self.theta_goal, self.theta_odom)) < self.theta_tol:
+                self.goto_service_on = False
+            else:
+                x_vel, y_vel, theta_vel = self.position_control()
 
-        return control_goals_updated
+        return x_vel, y_vel, theta_vel
+    
+    def cmd_vel_tick(self):
+        t = time.time()
+        # If too much time without an order, the speeds are smoothed back to 0 for safety.
+        if (self.cmd_vel is not None) and ((t - self.cmd_vel_t0) < self.cmd_vel_timeout):
+            self.x_vel_goal = self.cmd_vel.linear.x
+            self.y_vel_goal = self.cmd_vel.linear.y
+            self.theta_vel_goal = self.cmd_vel.angular.z
+        else:
+            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal =  0.0, 0.0, 0.0
+        return self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal
+        
+    
+    def cmd_goto_tick(self):
+        t = time.time()
+        # If too much time without an order, the speeds are smoothed back to 0 for safety.
+        if (self.cmd_vel is not None) and ((t - self.cmd_vel_t0) < self.cmd_vel_timeout):
+            # Normal case, orders where received
+            self.x_vel_goal = self.cmd_vel.linear.x
+            self.y_vel_goal = self.cmd_vel.linear.y
+            self.theta_vel_goal = self.cmd_vel.angular.z
+            self.fake_vel_goals_to_goto_goals(self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal)
+            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = self.position_control()
+        else:
+            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal =  0.0, 0.0, 0.0
+        return self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal
+        
+            
+    def handle_stop_modes(self, mode):
+        if mode is ZuuuModes.BRAKE:
+            self.omnibase.back_wheel.set_duty_cycle(0)
+            self.omnibase.left_wheel.set_duty_cycle(0)
+            self.omnibase.right_wheel.set_duty_cycle(0)
+        elif mode is ZuuuModes.FREE_WHEEL:
+            self.omnibase.back_wheel.set_current(0)
+            self.omnibase.left_wheel.set_current(0)
+            self.omnibase.right_wheel.set_current(0)
+        else:
+            msg = "Emergency stop requested"
+            self.get_logger().warning(msg)
+            self.emergency_shutdown()
+            raise RuntimeError(msg)
+            
+    def control_tick_real_mode(self, verbose: bool = False):
+        if self.mode is ZuuuModes.speed_modes():
+            # speed modes will perform different types of calculation, but will always output wheel speeds
+            TODO :
+                - decide if its ok that these functions return values. We could just rely on self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal
+                - refacto SPEED mode to be like the others
+                - implement the gazebo modes in the underlyngs functions ONLY (no glabal ifs)
+                - Test a lot
+            if self.mode is ZuuuModes.CMD_VEL:
+                x_vel, y_vel, theta_vel = self.cmd_vel_tick()
+            elif self.mode is ZuuuModes.SPEED:
+                if self.speed_service_deadline < time.time():
+                    if self.speed_service_on:
+                        self.get_logger().info("End of set speed duration, setting speeds to 0")
+                    self.speed_service_on = False
+                    x_vel, y_vel, theta_vel = 0.0, 0.0, 0.0
+                    
+            elif self.mode is ZuuuModes.GOTO:
+                x_vel, y_vel, theta_vel = self.goto_tick()
+            elif self.mode is ZuuuModes.CMD_GOTO:
+                x_vel, y_vel, theta_vel = self.cmd_goto_tick()
+
+            
+            # Here x_vel, y_vel, theta_vel have been calculated. 
+            # We'll apply filtering, safety checks, call the IK to get the wheel speeds and send them.
+            # TODO test if the smoothing is still needed
+            x_vel, y_vel, theta_vel = self.filter_speed_goals(x_vel, y_vel, theta_vel)
+            x_vel, y_vel, theta_vel = self.lidar_safety.safety_check_speed_command(self.x_vel_goal_filtered, self.y_vel_goal_filtered, self.theta_vel_goal_filtered)
+            x_vel, y_vel, theta_vel = self.limit_vel_commands(x_vel, y_vel, theta_vel)
+            # self.get_logger().warning(f"post limit vel control theta_vel {theta_vel:.2f}")
+
+            # IK calculations. mobile base speed -> wheel speeds
+            wheel_speeds = self.ik_vel(
+                self.x_vel_goal_filtered,
+                self.y_vel_goal_filtered,
+                self.theta_vel_goal_filtered,
+            )
+            self.send_wheel_commands(wheel_speeds)
+            
+        else:
+            # stop modes directly send stopping commands to the wheels
+            self.handle_stop_modes(self.mode)
+
+
+        self.old_measure_timestamp = self.measure_timestamp
+        self.measure_timestamp = self.get_clock().now()
+
+        # Reading the measurements (this is what takes most of the time, ~9ms)
+        # TODO should we run this in parallel?
+        self.read_measurements()
+        self.update_wheel_speeds()
+
+        if verbose:
+            self.print_all_measurements()
+
+        self.publish_wheel_speeds()
+        self.tick_odom()
+    
+    # Won't do it this way, the "send_commands" function will handle the mode
+    # def control_tick_gazebo_mode(self, verbose: bool = False):
+    #     # No matter the mode, the final speed sent to Gazebo in cartesian space is self.x_vel_goal_filtered, self.y_vel_goal_filtered, self.theta_vel_goal_filtered
+    #     # Note: we could calculate the wheel speeds here using the IK and pubish them, but it's not necessary in Gazebo since the wheels don't actually rotate (they slide)
+    #     t = time.time()
+    #     # Step 1 : calculate the speed x, y, theta of the mobile base
+    #     if self.mode is ZuuuModes.CMD_VEL:
+    #         # If too much time without a command, the speeds are smoothed back to 0 for safety.
+    #         if (self.cmd_vel is not None) and ((t - self.cmd_vel_t0) < self.cmd_vel_timeout):
+    #             self.x_vel_goal = self.cmd_vel.linear.x
+    #             self.y_vel_goal = self.cmd_vel.linear.y
+    #             self.theta_vel_goal = self.cmd_vel.angular.z
+    #         else:
+    #             self.x_vel_goal = 0.0
+    #             self.y_vel_goal = 0.0
+    #             self.theta_vel_goal = 0.0
+    #     elif self.mode is ZuuuModes.BRAKE or self.mode is ZuuuModes.FREE_WHEEL:
+    #         self.x_vel_goal = 0
+    #         self.y_vel_goal = 0
+    #         self.theta_vel_goal = 0
+    #     elif self.mode is ZuuuModes.SPEED:
+    #         if self.speed_service_deadline < time.time():
+    #             if self.speed_service_on:
+    #                 self.get_logger().info("End of set speed duration, setting speeds to 0")
+    #             self.speed_service_on = False
+    #             self.x_vel_goal = 0
+    #             self.y_vel_goal = 0
+    #             self.theta_vel_goal = 0
+    #     elif self.mode is ZuuuModes.GOTO:
+    #         self.x_vel_goal_filtered, self.y_vel_goal_filtered, self.theta_vel_goal_filtered = self.goto_tick()
+    #     elif self.mode is ZuuuModes.CMD_GOTO:
+    #         x_vel, y_vel, theta_vel = self.cmd_goto_tick()
+    #         wheel_speeds = self.ik_vel(x_vel, y_vel, theta_vel)
+    #         self.send_wheel_commands(wheel_speeds)
+    #     elif self.mode is ZuuuModes.EMERGENCY_STOP:
+    #         msg = "Emergency stop requested"
+    #         self.get_logger().warning(msg)
+    #         self.emergency_shutdown()
+    #         raise RuntimeError(msg)
+    #     else:
+    #         self.get_logger().warning("unknown mode '{}', setting it to brake".format(self.mode))
+    #         self.mode = ZuuuModes.BRAKE
+
+    #     self.old_measure_timestamp = self.measure_timestamp
+    #     self.measure_timestamp = self.get_clock().now()
+
+    #     # Reading the measurements (this is what takes most of the time, ~9ms)
+    #     self.read_measurements()
+    #     self.update_wheel_speeds()
+
+    #     if verbose:
+    #         self.print_all_measurements()
+
+    #     self.publish_wheel_speeds()
+    #     self.tick_odom()
+    
 
     def main_tick(self, verbose: bool = False):
         """Main function of the HAL node. This function is made to be called often. Handles the main state machine"""
-        t = time.time()
         # Commenting here is a temporary fix to allow the stack to run without the LIDAR
         # if (not self.scan_is_read) or ((t - self.scan_t0) > self.scan_timeout):
         #     # If too much time without a LIDAR scan, the speeds are set to 0 for safety.
@@ -1359,118 +1529,13 @@ class ZuuuHAL(Node):
         if self.first_tick:
             self.first_tick = False
             self.get_logger().info("=> Zuuu HAL up and running! **")
+            
+        if not self.fake_hardware:
+            self.control_tick_real_mode(verbose)
+        else: # for now only the Gazebo mode
+            self.control_tick_gazebo_mode(verbose)
 
-        if self.mode is ZuuuModes.CMD_VEL:
-            # If too much time without an order, the speeds are smoothed back to 0 for safety.
-            if (self.cmd_vel is not None) and ((t - self.cmd_vel_t0) < self.cmd_vel_timeout):
-                self.x_vel_goal = self.cmd_vel.linear.x
-                self.y_vel_goal = self.cmd_vel.linear.y
-                self.theta_vel_goal = self.cmd_vel.angular.z
-            else:
-                self.x_vel_goal = 0.0
-                self.y_vel_goal = 0.0
-                self.theta_vel_goal = 0.0
-            self.filter_speed_goals()
-            # Applying the LIDAR safety
-            wheel_speeds = self.ik_vel(
-                self.x_vel_goal_filtered,
-                self.y_vel_goal_filtered,
-                self.theta_vel_goal_filtered,
-            )
-            self.send_wheel_commands(wheel_speeds)
-        elif self.mode is ZuuuModes.BRAKE:
-            self.omnibase.back_wheel.set_duty_cycle(0)
-            self.omnibase.left_wheel.set_duty_cycle(0)
-            self.omnibase.right_wheel.set_duty_cycle(0)
-        elif self.mode is ZuuuModes.FREE_WHEEL:
-            self.omnibase.back_wheel.set_current(0)
-            self.omnibase.left_wheel.set_current(0)
-            self.omnibase.right_wheel.set_current(0)
-        elif self.mode is ZuuuModes.SPEED:
-            if self.speed_service_deadline < time.time():
-                if self.speed_service_on:
-                    self.get_logger().info("End of set speed duration, setting speeds to 0")
-                self.speed_service_on = False
-                self.x_vel_goal = 0
-                self.y_vel_goal = 0
-                self.theta_vel_goal = 0
-            self.filter_speed_goals()
-            wheel_speeds = self.ik_vel(
-                self.x_vel_goal_filtered,
-                self.y_vel_goal_filtered,
-                self.theta_vel_goal_filtered,
-            )
-            self.send_wheel_commands(wheel_speeds)
-        elif self.mode is ZuuuModes.GOTO:
-            x_vel, y_vel, theta_vel = 0, 0, 0
-            if self.goto_service_on:
-                distance = math.sqrt((self.x_goal - self.x_odom) ** 2 + (self.y_goal - self.y_odom) ** 2)
-                if distance < self.xy_tol and abs(angle_diff(self.theta_goal, self.theta_odom)) < self.theta_tol:
-                    self.goto_service_on = False
-                else:
-                    x_vel, y_vel, theta_vel = self.position_control()
-
-            x_vel, y_vel, theta_vel = self.lidar_safety.safety_check_speed_command(x_vel, y_vel, theta_vel)
-            wheel_speeds = self.ik_vel(x_vel, y_vel, theta_vel)
-            self.send_wheel_commands(wheel_speeds)
-        elif self.mode is ZuuuModes.CMD_GOTO:
-            if (self.cmd_vel is not None) and ((t - self.cmd_vel_t0) < self.cmd_vel_timeout):
-                # Normal case, orders where received
-                self.x_vel_goal = self.cmd_vel.linear.x
-                self.y_vel_goal = self.cmd_vel.linear.y
-                self.theta_vel_goal = self.cmd_vel.angular.z
-                self.filter_speed_goals()
-                control_goals_updated = self.fake_vel_goals_to_goto_goals(self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal)
-
-                if control_goals_updated:
-                    x_vel, y_vel, theta_vel = self.position_control()
-                    # self.get_logger().warning(f"post position control theta_vel {theta_vel:.2f}")
-
-                    x_vel, y_vel, theta_vel = self.limit_vel_commands(x_vel, y_vel, theta_vel)
-                    # self.get_logger().warning(f"post limit vel control theta_vel {theta_vel:.2f}")
-
-                    x_vel, y_vel, theta_vel = self.lidar_safety.safety_check_speed_command(x_vel, y_vel, theta_vel)
-                    # self.get_logger().warning(f"post safety check theta_vel {theta_vel:.2f}")
-
-                    wheel_speeds = self.ik_vel(x_vel, y_vel, theta_vel)
-                else:
-                    wheel_speeds = self.ik_vel(0.0, 0.0, 0.0)
-                self.send_wheel_commands(wheel_speeds)
-            else:
-                # If too much time without an order, the speeds are smoothed back to 0 for safety.
-                self.x_vel_goal = 0.0
-                self.y_vel_goal = 0.0
-                self.theta_vel_goal = 0.0
-                self.filter_speed_goals()
-                wheel_speeds = self.ik_vel(
-                    self.x_vel_goal_filtered,
-                    self.y_vel_goal_filtered,
-                    self.theta_vel_goal_filtered,
-                )
-                self.send_wheel_commands(wheel_speeds)
-
-        elif self.mode is ZuuuModes.EMERGENCY_STOP:
-            msg = "Emergency stop requested"
-            self.get_logger().warning(msg)
-            self.emergency_shutdown()
-            raise RuntimeError(msg)
-
-        else:
-            self.get_logger().warning("unknown mode '{}', setting it to brake".format(self.mode))
-            self.mode = ZuuuModes.BRAKE
-
-        self.old_measure_timestamp = self.measure_timestamp
-        self.measure_timestamp = self.get_clock().now()
-
-        # Reading the measurements (this is what takes most of the time, ~9ms)
-        self.read_measurements()
-        self.update_wheel_speeds()
-
-        if verbose:
-            self.print_all_measurements()
-
-        self.publish_wheel_speeds()
-        self.tick_odom()
+        
         # publish the safety status
         # the safety status is published in the `mobile_base_safety_status` topic
         self.publish_mobile_base_state()
