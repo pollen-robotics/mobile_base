@@ -197,9 +197,6 @@ class ZuuuHAL(Node):
         """
         super().__init__("zuuu_hal")
         self.get_logger().info("Starting zuuu_hal!")
-        # self.zuuu_model = check_output(
-        #     os.path.expanduser('~')+'/.local/bin/reachy-identify-zuuu-model'
-        #     ).strip().decode()
         
         self.declare_parameter('fake_hardware', False)
         self.fake_hardware = self.get_parameter('fake_hardware').value
@@ -364,7 +361,6 @@ class ZuuuHAL(Node):
             self.scan_filter_callback,
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT),
         )
-        self.scan_sub  # prevent unused variable warning... JESUS WHAT HAVE WE BECOME
         self.scan_pub = self.create_publisher(LaserScan, "scan_filterd", 10)
         self.lidar_image_pub = self.create_publisher(Image, "lidar_image", 1)
 
@@ -376,6 +372,8 @@ class ZuuuHAL(Node):
         self.pub_mobile_base_state = self.create_publisher(MobileBaseState, "mobile_base_state", 2)
 
         self.pub_odom = self.create_publisher(Odometry, "odom", 2)
+        
+        self.pub_fake_vel = self.create_publisher(Twist, "cmd_vel_fake", QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))        
 
         self.mode_service = self.create_service(SetZuuuMode, "SetZuuuMode", self.handle_zuuu_mode)
 
@@ -660,6 +658,8 @@ class ZuuuHAL(Node):
         """Checks that the battery readings are not too old and forces a read if need be.
         Checks that the battery voltages are safe and warns or stops the HAL accordingly.
         """
+        if self.fake_hardware:
+            return
         t = time.time()
         if verbose:
             self.print_all_measurements()
@@ -686,9 +686,13 @@ class ZuuuHAL(Node):
 
     def emergency_shutdown(self) -> None:
         """Sets a PWM of 0V to the three wheel motors, equivalent to a brake."""
-        self.omnibase.back_wheel.set_duty_cycle(0)
-        self.omnibase.left_wheel.set_duty_cycle(0)
-        self.omnibase.right_wheel.set_duty_cycle(0)
+        if not self.fake_hardware:
+            self.omnibase.back_wheel.set_duty_cycle(0)
+            self.omnibase.left_wheel.set_duty_cycle(0)
+            self.omnibase.right_wheel.set_duty_cycle(0)
+        else:
+            self.publish_fake_robot_speed(0, 0, 0)
+        
         self.get_logger().warn("Emergency shutdown!")
         time.sleep(0.1)
 
@@ -996,13 +1000,21 @@ class ZuuuHAL(Node):
         t.transform.rotation.w = q[3]
 
         self.br.sendTransform(t)
+        
+    def publish_fake_robot_speed(self, x_vel, y_vel, theta_vel) -> None:
+        """Publishes the current robot speed (Twist type)"""
+        twist = Twist()
+        twist.linear.x = x_vel
+        twist.linear.y = y_vel
+        twist.angular.z = theta_vel
+        self.pub_fake_vel.publish(twist)
 
     def tick_odom(self) -> None:
         """Updates the odometry values based on the small displacement measured since the last tick,
         then publishes the results with publish_odometry_and_tf()
         """
         # Note: VESC speed values are, as is normal, very noisy at low speeds.
-        # We have no control on how the speeds are calculated as is.
+        # We currently have no control on how the speeds are calculated.
         # -> By reading the encoder ticks directly and making the calculations here we could maybe make this a tad better?
 
         # Local speeds in egocentric frame.
@@ -1095,6 +1107,8 @@ class ZuuuHAL(Node):
 
     def read_measurements(self) -> None:
         """Calls the low level functions to read the measurements on the 3 wheel controllers"""
+        if self.fake_hardware:
+            return
         self.omnibase.read_all_measurements()
         if self.omnibase.back_wheel_measurements is not None:
             self.battery_voltage = self.omnibase.back_wheel_measurements.v_in
@@ -1390,22 +1404,29 @@ class ZuuuHAL(Node):
             
     def handle_stop_modes(self, mode):
         if mode is ZuuuModes.BRAKE:
-            self.omnibase.back_wheel.set_duty_cycle(0)
-            self.omnibase.left_wheel.set_duty_cycle(0)
-            self.omnibase.right_wheel.set_duty_cycle(0)
+            if not self.fake_hardware:
+                self.omnibase.back_wheel.set_duty_cycle(0)
+                self.omnibase.left_wheel.set_duty_cycle(0)
+                self.omnibase.right_wheel.set_duty_cycle(0)
+            else:
+                self.publish_fake_robot_speed(0, 0, 0)
+            
         elif mode is ZuuuModes.FREE_WHEEL:
-            self.omnibase.back_wheel.set_current(0)
-            self.omnibase.left_wheel.set_current(0)
-            self.omnibase.right_wheel.set_current(0)
+            if not self.fake_hardware:
+                self.omnibase.back_wheel.set_current(0)
+                self.omnibase.left_wheel.set_current(0)
+                self.omnibase.right_wheel.set_current(0)
+            else:
+                self.publish_fake_robot_speed(0, 0, 0)
         else:
             msg = "Emergency stop requested"
             self.get_logger().warning(msg)
             self.emergency_shutdown()
             raise RuntimeError(msg)
             
-    def control_tick_real_mode(self, verbose: bool = False):
+    def control_tick(self, verbose: bool = False):
         if self.mode is ZuuuModes.speed_modes():
-            # speed modes will perform different types of calculation, but will always output speeds in the robot's frame
+            # Speed modes will perform different types of calculation, but will always output speeds in the robot's frame
             if self.mode is ZuuuModes.CMD_VEL:
                 self.cmd_vel_tick()
             elif self.mode is ZuuuModes.SPEED:
@@ -1423,86 +1444,34 @@ class ZuuuHAL(Node):
 
             # IK calculations. From Robot's speed to wheels' speeds
             wheel_speeds = self.ik_vel(x_vel, y_vel, theta_vel)
-            self.send_wheel_commands(wheel_speeds)
+            if self.fake_hardware:
+                # In fake or Gazebo mode, the robot's speed is published directly and the mouvement is simulated
+                self.publish_fake_robot_speed(x_vel, y_vel, theta_vel)
+            else:
+                # Sending the commands to the physical wheels
+                self.send_wheel_commands(wheel_speeds)
+                # Reading the measurements (this is what takes most of the time, ~9ms)
+                # TODO should we run this in parallel?
+                self.read_measurements()
+                self.update_wheel_speeds()
+
+                if verbose:
+                    self.print_all_measurements()
+
+                self.publish_wheel_speeds()                
         else:
-            # stop modes directly send stopping commands to the wheels
+            # Stop modes directly send stopping commands to the wheels
             self.handle_stop_modes(self.mode)
 
 
         self.old_measure_timestamp = self.measure_timestamp
         self.measure_timestamp = self.get_clock().now()
-
-        # Reading the measurements (this is what takes most of the time, ~9ms)
-        # TODO should we run this in parallel?
-        self.read_measurements()
-        self.update_wheel_speeds()
-
-        if verbose:
-            self.print_all_measurements()
-
-        self.publish_wheel_speeds()
         self.tick_odom()
-    
-    # Won't do it this way, the "send_commands" function will handle the mode
-    # def control_tick_gazebo_mode(self, verbose: bool = False):
-    #     # No matter the mode, the final speed sent to Gazebo in cartesian space is self.x_vel_goal_filtered, self.y_vel_goal_filtered, self.theta_vel_goal_filtered
-    #     # Note: we could calculate the wheel speeds here using the IK and pubish them, but it's not necessary in Gazebo since the wheels don't actually rotate (they slide)
-    #     t = time.time()
-    #     # Step 1 : calculate the speed x, y, theta of the mobile base
-    #     if self.mode is ZuuuModes.CMD_VEL:
-    #         # If too much time without a command, the speeds are smoothed back to 0 for safety.
-    #         if (self.cmd_vel is not None) and ((t - self.cmd_vel_t0) < self.cmd_vel_timeout):
-    #             self.x_vel_goal = self.cmd_vel.linear.x
-    #             self.y_vel_goal = self.cmd_vel.linear.y
-    #             self.theta_vel_goal = self.cmd_vel.angular.z
-    #         else:
-    #             self.x_vel_goal = 0.0
-    #             self.y_vel_goal = 0.0
-    #             self.theta_vel_goal = 0.0
-    #     elif self.mode is ZuuuModes.BRAKE or self.mode is ZuuuModes.FREE_WHEEL:
-    #         self.x_vel_goal = 0
-    #         self.y_vel_goal = 0
-    #         self.theta_vel_goal = 0
-    #     elif self.mode is ZuuuModes.SPEED:
-    #         if self.speed_service_deadline < time.time():
-    #             if self.speed_service_on:
-    #                 self.get_logger().info("End of set speed duration, setting speeds to 0")
-    #             self.speed_service_on = False
-    #             self.x_vel_goal = 0
-    #             self.y_vel_goal = 0
-    #             self.theta_vel_goal = 0
-    #     elif self.mode is ZuuuModes.GOTO:
-    #         self.x_vel_goal_filtered, self.y_vel_goal_filtered, self.theta_vel_goal_filtered = self.goto_tick()
-    #     elif self.mode is ZuuuModes.CMD_GOTO:
-    #         x_vel, y_vel, theta_vel = self.cmd_goto_tick()
-    #         wheel_speeds = self.ik_vel(x_vel, y_vel, theta_vel)
-    #         self.send_wheel_commands(wheel_speeds)
-    #     elif self.mode is ZuuuModes.EMERGENCY_STOP:
-    #         msg = "Emergency stop requested"
-    #         self.get_logger().warning(msg)
-    #         self.emergency_shutdown()
-    #         raise RuntimeError(msg)
-    #     else:
-    #         self.get_logger().warning("unknown mode '{}', setting it to brake".format(self.mode))
-    #         self.mode = ZuuuModes.BRAKE
-
-    #     self.old_measure_timestamp = self.measure_timestamp
-    #     self.measure_timestamp = self.get_clock().now()
-
-    #     # Reading the measurements (this is what takes most of the time, ~9ms)
-    #     self.read_measurements()
-    #     self.update_wheel_speeds()
-
-    #     if verbose:
-    #         self.print_all_measurements()
-
-    #     self.publish_wheel_speeds()
-    #     self.tick_odom()
-    
+        
 
     def main_tick(self, verbose: bool = False):
         """Main function of the HAL node. This function is made to be called often. Handles the main state machine"""
-        # Commenting here is a temporary fix to allow the stack to run without the LIDAR
+        # Uncomment here to forbid the robot to move without a LIDAR scan
         # if (not self.scan_is_read) or ((t - self.scan_t0) > self.scan_timeout):
         #     # If too much time without a LIDAR scan, the speeds are set to 0 for safety.
         #     self.get_logger().warning(
@@ -1512,15 +1481,12 @@ class ZuuuHAL(Node):
         #     self.send_wheel_commands(wheel_speeds)
         #     time.sleep(0.5)
         #     return
+        t = time.time()
         if self.first_tick:
             self.first_tick = False
             self.get_logger().info("=> Zuuu HAL up and running! **")
-            
-        if not self.fake_hardware:
-            self.control_tick_real_mode(verbose)
-        else: # for now only the Gazebo mode
-            self.control_tick_gazebo_mode(verbose)
 
+        self.control_tick(verbose)
         
         # publish the safety status
         # the safety status is published in the `mobile_base_safety_status` topic
@@ -1532,9 +1498,9 @@ class ZuuuHAL(Node):
         # Time measurement
         dt = time.time() - t
         if dt == 0:
-            f = 0
+            f = 0.0
         else:
-            f = 1 / dt
+            f = 1.0 / dt
         if verbose:
             self.get_logger().info("zuuu tick potential freq: {:.0f}Hz (dt={:.0f}ms)".format(f, 1000 * dt))
 
