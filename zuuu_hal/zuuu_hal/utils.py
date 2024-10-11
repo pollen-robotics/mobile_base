@@ -65,7 +65,7 @@ class PID:
         else:
             return x
 
-    def tick(self, current_value: float, is_angle: bool = False) -> None:
+    def tick(self, current_value: float, is_angle: bool = False) -> float:
         """PID calculations. If is_angle is True, then the error will be calculated as the smallest angle between
         the goal and the current_value
         Arguments:

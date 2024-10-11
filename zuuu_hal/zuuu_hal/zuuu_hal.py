@@ -1136,12 +1136,11 @@ class ZuuuHAL(Node):
 
     def position_control(self) -> List[float]:
         """Calculates the speed targets to be sent on x, y and theta to reach their respective goals during a GoTo
-        This function uses 3 separate PIDs controllers.
+        This function uses 3 separate PIDs controllers who's targets must be set before calling this function.
         """
         x_command_odom = self.x_pid.tick(self.x_odom)
         y_command_odom = self.y_pid.tick(self.y_odom)
         theta_command_odom = self.theta_pid.tick(self.theta_odom, is_angle=True)
-        # self.get_logger().warning(f"theta error: '{self.theta_pid.prev_error:.2f}', command:'{theta_command_odom:.2f}'")
 
         x_command = x_command_odom * math.cos(-self.theta_odom) - y_command_odom * math.sin(-self.theta_odom)
         y_command = x_command_odom * math.sin(-self.theta_odom) + y_command_odom * math.cos(-self.theta_odom)
@@ -1254,10 +1253,9 @@ class ZuuuHAL(Node):
         return p_goal[0], p_goal[1]
 
     def fake_vel_goals_to_goto_goals(self, x_vel_goal, y_vel_goal, theta_vel_goal):
-        # TODO : tune this (linear)
-        dx = self.x_vel_goal_filtered
-        dy = self.y_vel_goal_filtered
-        dtheta = self.theta_vel_goal_filtered
+        dx = x_vel_goal
+        dy = y_vel_goal
+        dtheta = theta_vel_goal
         # Limiting the span of dtheta (if dtheta is allowed beyond PI, the PID will inverse the sign of the rotation, creating a discontinuity in control)
         max_dtheta = 5 * math.pi / 6
         if dtheta > max_dtheta:
@@ -1265,8 +1263,6 @@ class ZuuuHAL(Node):
         elif dtheta < -max_dtheta:
             dtheta = -max_dtheta
         almost_zero = 0.001
-        nb_control_ticks_wait = 10
-        control_goals_updated = True
         # OK il faut faire du goal_theta quand on rotate pas, et du current sinon.
         (
             joy_angle,
@@ -1346,17 +1342,6 @@ class ZuuuHAL(Node):
         self.y_pid.set_goal(self.y_goal)
         self.theta_pid.set_goal(self.theta_goal)
     
-    def goto_tick(self):
-        x_vel, y_vel, theta_vel = 0, 0, 0
-        if self.goto_service_on:
-            distance = math.sqrt((self.x_goal - self.x_odom) ** 2 + (self.y_goal - self.y_odom) ** 2)
-            if distance < self.xy_tol and abs(angle_diff(self.theta_goal, self.theta_odom)) < self.theta_tol:
-                self.goto_service_on = False
-            else:
-                x_vel, y_vel, theta_vel = self.position_control()
-
-        return x_vel, y_vel, theta_vel
-    
     def cmd_vel_tick(self):
         t = time.time()
         # If too much time without an order, the speeds are smoothed back to 0 for safety.
@@ -1366,8 +1351,28 @@ class ZuuuHAL(Node):
             self.theta_vel_goal = self.cmd_vel.angular.z
         else:
             self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal =  0.0, 0.0, 0.0
-        return self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal
-        
+    
+    def speed_mode_tick(self)-> None :
+        """Tick function for the speed mode. Will only set the speeds to 0 if the duration is over.
+        """
+        if self.speed_service_deadline < time.time():
+            if self.speed_service_on:
+                self.get_logger().info("End of set speed duration, setting speeds to 0")
+            self.speed_service_on = False
+            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal =  0.0, 0.0, 0.0
+            
+    def goto_tick(self)-> None:
+        """Tick function for the goto mode. Will calculate the robot's speed to reach a goal pose in the odometry frame.
+        """
+        if self.goto_service_on:
+            distance = math.sqrt((self.x_goal - self.x_odom) ** 2 + (self.y_goal - self.y_odom) ** 2)
+            if distance < self.xy_tol and abs(angle_diff(self.theta_goal, self.theta_odom)) < self.theta_tol:
+                self.goto_service_on = False
+                self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal =  0.0, 0.0, 0.0
+            else:
+                self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = self.position_control()
+        else:
+            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal =  0.0, 0.0, 0.0
     
     def cmd_goto_tick(self):
         t = time.time()
@@ -1381,7 +1386,6 @@ class ZuuuHAL(Node):
             self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = self.position_control()
         else:
             self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal =  0.0, 0.0, 0.0
-        return self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal
         
             
     def handle_stop_modes(self, mode):
@@ -1401,43 +1405,25 @@ class ZuuuHAL(Node):
             
     def control_tick_real_mode(self, verbose: bool = False):
         if self.mode is ZuuuModes.speed_modes():
-            # speed modes will perform different types of calculation, but will always output wheel speeds
-            TODO :
-                - decide if its ok that these functions return values. We could just rely on self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal
-                - refacto SPEED mode to be like the others
-                - implement the gazebo modes in the underlyngs functions ONLY (no glabal ifs)
-                - Test a lot
+            # speed modes will perform different types of calculation, but will always output speeds in the robot's frame
             if self.mode is ZuuuModes.CMD_VEL:
-                x_vel, y_vel, theta_vel = self.cmd_vel_tick()
+                self.cmd_vel_tick()
             elif self.mode is ZuuuModes.SPEED:
-                if self.speed_service_deadline < time.time():
-                    if self.speed_service_on:
-                        self.get_logger().info("End of set speed duration, setting speeds to 0")
-                    self.speed_service_on = False
-                    x_vel, y_vel, theta_vel = 0.0, 0.0, 0.0
-                    
+                self.speed_mode_tick()
             elif self.mode is ZuuuModes.GOTO:
-                x_vel, y_vel, theta_vel = self.goto_tick()
+                self.goto_tick()
             elif self.mode is ZuuuModes.CMD_GOTO:
-                x_vel, y_vel, theta_vel = self.cmd_goto_tick()
+                self.cmd_goto_tick()
 
-            
-            # Here x_vel, y_vel, theta_vel have been calculated. 
-            # We'll apply filtering, safety checks, call the IK to get the wheel speeds and send them.
-            # TODO test if the smoothing is still needed
-            x_vel, y_vel, theta_vel = self.filter_speed_goals(x_vel, y_vel, theta_vel)
-            x_vel, y_vel, theta_vel = self.lidar_safety.safety_check_speed_command(self.x_vel_goal_filtered, self.y_vel_goal_filtered, self.theta_vel_goal_filtered)
+            # Here, the following values have been calculated: self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal
+            # We'll apply filtering, safety checks, call the IK to get the wheel speeds and send them to the controller.
+            x_vel, y_vel, theta_vel = self.filter_speed_goals(self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal)
+            x_vel, y_vel, theta_vel = self.lidar_safety.safety_check_speed_command(x_vel, y_vel, theta_vel)
             x_vel, y_vel, theta_vel = self.limit_vel_commands(x_vel, y_vel, theta_vel)
-            # self.get_logger().warning(f"post limit vel control theta_vel {theta_vel:.2f}")
 
-            # IK calculations. mobile base speed -> wheel speeds
-            wheel_speeds = self.ik_vel(
-                self.x_vel_goal_filtered,
-                self.y_vel_goal_filtered,
-                self.theta_vel_goal_filtered,
-            )
+            # IK calculations. From Robot's speed to wheels' speeds
+            wheel_speeds = self.ik_vel(x_vel, y_vel, theta_vel)
             self.send_wheel_commands(wheel_speeds)
-            
         else:
             # stop modes directly send stopping commands to the wheels
             self.handle_stop_modes(self.mode)
