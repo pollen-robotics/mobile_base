@@ -4,8 +4,8 @@
 
         <gazebo>
             <plugin name="object_controller" filename="libgazebo_ros_planar_move.so">
-
-                <commandTopic>cmd_vel_fake</commandTopic>
+                <!-- Caution: the commandTopic field seems to be ignored, it seems to always listen to cmd_vel -->
+                <commandTopic>cmd_vel</commandTopic>
                 <odometryTopic>odom</odometryTopic>
                 <robotNamespace> </robotNamespace>
 

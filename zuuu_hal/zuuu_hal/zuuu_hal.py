@@ -131,26 +131,19 @@ class MobileBase:
             {"can_id": back_wheel_id, "has_sensor": True, "start_heartbeat": True},
         ]
         self.fake_hardware = fake_hardware
-        if not self.fake_hardware:
-            self._multi_vesc = MultiVESC(serial_port=serial_port, vescs_params=params)
-
-        self.left_wheel, self.right_wheel, self.back_wheel = self._multi_vesc.controllers
-        init_measurements_value = "No measurements in fake_hardware mode" if fake_hardware else None
-        (
-            self.left_wheel_measurements,
-            self.right_wheel_measurements,
-            self.back_wheel_measurements,
-        ) = (init_measurements_value, init_measurements_value, init_measurements_value)
+        # These values might be a tad too safe, however the battery should be almost empty when the cells are
+        # on average at 3.3V so there is little to win to go below this. Still tunable if needed.
+        # The current battery has a BMS that shuts down the battery at 20V +-1V. So that would be 2.86V +-0.14V.
+        self.battery_cell_warn_voltage = 3.5
+        self.battery_cell_min_voltage = 3.3
+        self.battery_nb_cells = 7
+        self.battery_check_period = 60
         self.left_wheel_nones, self.right_wheel_nones, self.back_wheel_nones = 0, 0, 0
         self.wheel_radius = 0.21 / 2.0
         self.wheel_to_center = 0.19588  # 0.188
         self.half_poles = 15.0
         self.left_wheel_rpm, self.right_wheel_rpm, self.back_wheel_rpm = 0, 0, 0
-        self.left_wheel_avg_rpm, self.right_wheel_avg_rpm, self.back_wheel_avg_rpm = (
-            0,
-            0,
-            0,
-        )
+        self.left_wheel_avg_rpm, self.right_wheel_avg_rpm, self.back_wheel_avg_rpm = 0, 0, 0
         (
             self.left_wheel_rpm_deque,
             self.right_wheel_rpm_deque,
@@ -160,13 +153,18 @@ class MobileBase:
             deque([], 10),
             deque([], 10),
         )
-        # These values might be a tad too safe, however the battery should be almost empty when the cells are
-        # on average at 3.3V so there is little to win to go below this. Still tunable if needed.
-        # The current battery has a BMS that shuts down the battery at 20V +-1V. So that would be 2.86V +-0.14V.
-        self.battery_cell_warn_voltage = 3.5
-        self.battery_cell_min_voltage = 3.3
-        self.battery_nb_cells = 7
-        self.battery_check_period = 60
+        init_measurements_value = "No measurements in fake_hardware mode" if fake_hardware else None
+        (
+            self.left_wheel_measurements,
+            self.right_wheel_measurements,
+            self.back_wheel_measurements,
+        ) = (init_measurements_value, init_measurements_value, init_measurements_value)
+                
+        if not self.fake_hardware:
+            self._multi_vesc = MultiVESC(serial_port=serial_port, vescs_params=params)
+            self.left_wheel, self.right_wheel, self.back_wheel = self._multi_vesc.controllers
+
+        
 
     def read_all_measurements(self) -> None:
         """Reads all the measurements for the left, right and back wheels"""
@@ -202,28 +200,28 @@ class ZuuuHAL(Node):
         self.fake_hardware = self.get_parameter('fake_hardware').value
         
         if self.fake_hardware:
-            self.get_logger().info("Running zuuu_hal in fake hardware mode. TODO.")
-            return
+            self.get_logger().info("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ Running zuuu_hal in fake hardware mode\n$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
             # self.omnibase = MobileBase(left_wheel_id=None, right_wheel_id=None, back_wheel_id=None, fake_hardware=True)
-            
         else:
-            self.get_logger().info("Running zuuu_hal on physical hardware")
-            reachy_config = ReachyConfig()
-            self.zuuu_version = reachy_config.mobile_base_config["version_hard"]
-            self.get_logger().info(f"zuuu version: {self.zuuu_version}")
-            try:
-                float_model = float(self.zuuu_version)
-            except Exception:
-                msg = "ZUUU version can't be processed, check that the 'zuuu_version' tag is " "present in the .reachy.yaml file"
-                self.get_logger().error(msg)
-                self.get_logger().error(traceback.format_exc())
-                raise RuntimeError(msg)
-            if float_model < 1.0:
-                self.omnibase = MobileBase(left_wheel_id=24, right_wheel_id=72, back_wheel_id=None)
-            elif float_model < 1.2:
-                self.omnibase = MobileBase(left_wheel_id=24, right_wheel_id=None, back_wheel_id=116)
-            else:
-                self.omnibase = MobileBase(left_wheel_id=None, right_wheel_id=72, back_wheel_id=116)
+            # self.get_logger().info("Running zuuu_hal on physical hardware")
+            self.get_logger().info("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ Running zuuu_hal on physical hardware\n$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
+            
+        reachy_config = ReachyConfig()
+        self.zuuu_version = reachy_config.mobile_base_config["version_hard"]
+        self.get_logger().info(f"zuuu version: {self.zuuu_version}")
+        try:
+            float_model = float(self.zuuu_version)
+        except Exception:
+            msg = "ZUUU version can't be processed, check that the 'zuuu_version' tag is " "present in the .reachy.yaml file"
+            self.get_logger().error(msg)
+            self.get_logger().error(traceback.format_exc())
+            raise RuntimeError(msg)
+        if float_model < 1.0:
+            self.omnibase = MobileBase(left_wheel_id=24, right_wheel_id=72, back_wheel_id=None, fake_hardware=self.fake_hardware)
+        elif float_model < 1.2:
+            self.omnibase = MobileBase(left_wheel_id=24, right_wheel_id=None, back_wheel_id=116, fake_hardware=self.fake_hardware)
+        else:
+            self.omnibase = MobileBase(left_wheel_id=None, right_wheel_id=72, back_wheel_id=116, fake_hardware=self.fake_hardware)
         
 
         self.get_logger().info("Reading Zuuu's sensors once...")
@@ -1004,10 +1002,12 @@ class ZuuuHAL(Node):
     def publish_fake_robot_speed(self, x_vel, y_vel, theta_vel) -> None:
         """Publishes the current robot speed (Twist type)"""
         twist = Twist()
-        twist.linear.x = x_vel
-        twist.linear.y = y_vel
-        twist.angular.z = theta_vel
+        twist.linear.x = float(x_vel)
+        twist.linear.y = float(y_vel)
+        twist.angular.z = float(theta_vel)
+        
         self.pub_fake_vel.publish(twist)
+        self.get_logger().info(f"Fake robot speed published: x={x_vel}, y={y_vel}, theta={theta_vel}")
 
     def tick_odom(self) -> None:
         """Updates the odometry values based on the small displacement measured since the last tick,
@@ -1029,6 +1029,8 @@ class ZuuuHAL(Node):
         # Applying the small displacement in the world-fixed odom frame (simple 2D rotation)
         dt_duration = self.measure_timestamp - self.old_measure_timestamp
         dt_seconds = dt_duration.nanoseconds / S_TO_NS
+        if dt_seconds == 0:
+            return
         dx = (self.x_vel * math.cos(self.theta_odom) - self.y_vel * math.sin(self.theta_odom)) * dt_seconds
         dy = (self.x_vel * math.sin(self.theta_odom) + self.y_vel * math.cos(self.theta_odom)) * dt_seconds
         dtheta = self.theta_vel * dt_seconds
@@ -1419,13 +1421,13 @@ class ZuuuHAL(Node):
             else:
                 self.publish_fake_robot_speed(0, 0, 0)
         else:
-            msg = "Emergency stop requested"
+            msg = "Mode requested: {} => calling emergency_shutdown".format(mode)
             self.get_logger().warning(msg)
             self.emergency_shutdown()
             raise RuntimeError(msg)
             
     def control_tick(self, verbose: bool = False):
-        if self.mode is ZuuuModes.speed_modes():
+        if self.mode in ZuuuModes.speed_modes():
             # Speed modes will perform different types of calculation, but will always output speeds in the robot's frame
             if self.mode is ZuuuModes.CMD_VEL:
                 self.cmd_vel_tick()
@@ -1509,22 +1511,21 @@ def main(args=None) -> None:
     """Run ZuuuHAL main loop"""
     rclpy.init(args=args)
     
-    try:
-        node = ZuuuHAL()
-    except Exception:
-        rclpy.logging._root_logger.error(traceback.format_exc())
-        rclpy.logging._root_logger.error("Failed to init ZuuuHAL")
-        rclpy.shutdown()
-        sys.exit(1)
+    node = ZuuuHAL()
+    rclpy.logging._root_logger.error("ZuuuHAL node started!!!!!!!!!!!!!!!!!!!!!!")
+    rclpy.logging._root_logger.error("Going to spin!!!!!!!!!!!!!!!!!!!!!!")
+    rclpy.spin(node)
 
-    try:
-        rclpy.spin(node)
-    except Exception:
-        rclpy.logging._root_logger.error(traceback.format_exc())
-    finally:
-        node.emergency_shutdown()
-        node.destroy_node()
-        rclpy.shutdown()
+    # try:
+
+        
+    #     rclpy.spin(node)
+    # # except Exception:
+    # #     rclpy.logging._root_logger.error(traceback.format_exc())
+    # finally:
+    #     node.emergency_shutdown()
+    #     node.destroy_node()
+    #     rclpy.shutdown()
 
 
 if __name__ == "__main__":
