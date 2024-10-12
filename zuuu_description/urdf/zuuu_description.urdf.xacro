@@ -67,6 +67,7 @@
 
 
       <xacro:if value="$(arg use_fixed_wheels)">
+        <!-- If use_fixed_wheels the wheels can't rotate, they will slide on the floor -->
         <joint name="${prefix}_joint" type="fixed">
           <parent link="base_link" />
           <child link="${prefix}_link" />
@@ -74,10 +75,9 @@
           <axis xyz="0 1 0" />
           <joint_properties damping="${global_damping}" friction="${global_friction}" />
         </joint>
-        <!-- No friction because we suck and everything is lame -->
         <gazebo reference="${prefix}_link">
-          <mu1 value="0.0" />
-          <mu2 value="0.0" />
+          <mu1 value="0.1" />
+          <mu2 value="0.1" />
           <kp value="10000000.0" />
           <kd value="1.0" />
           <fdir1 value="1 0 0" />
@@ -88,6 +88,8 @@
       </xacro:if>
 
       <xacro:unless value="$(arg use_fixed_wheels)">
+        <!-- If not use_fixed_wheels the wheels will rotate. The friction parameters try to emulate holonomic wheels, it kinda works but is unreliable with Gazebo -->
+
         <joint name="${prefix}_joint" type="continuous">
           <parent link="base_link" />
           <child link="${prefix}_link" />
@@ -155,19 +157,19 @@
         <xacro:reachy_grey/>
       </visual>
       <!-- Real collision -->
-      <!-- <collision>
+      <collision>
         <origin xyz="0 0 0.145" rpy="0 0 0"/>
         <geometry>
           <cylinder radius="0.245" length="0.19"/>
         </geometry>
-      </collision> -->
+      </collision>
       <!-- exagerated collision to avoid the mobile base sliding on Gazebo -->
-      <collision>
+      <!-- <collision>
         <origin xyz="0 0 0.12" rpy="0 0 0"/>
         <geometry>
           <cylinder radius="0.245" length="0.24"/>
         </geometry>
-      </collision>
+      </collision> -->
     
       <inertial>
           <origin xyz="0.008 -0.00048 0.112" rpy="0 0 0"/>
