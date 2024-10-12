@@ -297,9 +297,19 @@ class ZuuuHAL(Node):
         self.x_odom = 0.0
         self.y_odom = 0.0
         self.theta_odom = 0.0
+        self.x_odom_gazebo = 0.0
+        self.y_odom_gazebo = 0.0
+        self.theta_odom_gazebo = 0.0
+        self.x_odom_gazebo_old = 0.0
+        self.y_odom_gazebo_old = 0.0
+        self.theta_odom_gazebo_old = 0.0
+        self.theta_zuuu_vs_gazebo = 0.0
         self.vx = 0.0
         self.vy = 0.0
         self.vtheta = 0.0
+        self.vx_gazebo = 0.0
+        self.vy_gazebo = 0.0
+        self.vtheta_gazebo = 0.0
         self.x_vel = 0.0
         self.y_vel = 0.0
         self.theta_vel = 0.0
@@ -314,8 +324,8 @@ class ZuuuHAL(Node):
         self.theta_goal = 0.0
         self.reset_odom = False
         self.battery_voltage = 25.0
-        # self.mode = ZuuuModes.CMD_GOTO
-        self.mode = ZuuuModes.CMD_VEL
+        self.mode = ZuuuModes.CMD_GOTO
+        # self.mode = ZuuuModes.CMD_VEL
         self.speed_service_deadline = 0
         self.speed_service_on = False
         self.goto_service_on = False
@@ -359,6 +369,14 @@ class ZuuuHAL(Node):
             self.scan_filter_callback,
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT),
         )
+        if self.fake_hardware:
+            # In Gazebo mode we'll subscribe to the odom topic published by the gazebo plugin
+            self.odom_sub = self.create_subscription(
+                Odometry,
+                "odom",
+                self.gazebo_odom_callback,
+                QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT),
+            )
         self.scan_pub = self.create_publisher(LaserScan, "scan_filterd", 10)
         self.lidar_image_pub = self.create_publisher(Image, "lidar_image", 1)
 
@@ -369,7 +387,7 @@ class ZuuuHAL(Node):
         # distance to goal publisher replacing the old service `DistanceToGoal`
         self.pub_mobile_base_state = self.create_publisher(MobileBaseState, "mobile_base_state", 2)
 
-        self.pub_odom = self.create_publisher(Odometry, "odom", 2)
+        self.pub_odom = self.create_publisher(Odometry, "odom_zuuu", 2)
         
         self.pub_fake_vel = self.create_publisher(Twist, "cmd_vel", 10)                
 
@@ -736,6 +754,19 @@ class ZuuuHAL(Node):
         # Publishing the safety image
         lidar_img = self.lidar_safety.create_safety_img(filtered_scan)
         self.lidar_image_pub.publish(self.cv_bridge.cv2_to_imgmsg(lidar_img))
+        
+    def gazebo_odom_callback(self, msg: Odometry) -> None:
+        """Callback method on the /odom topic used in Gazebo mode"""
+        self.vx_gazebo = msg.twist.twist.linear.x
+        self.vy_gazebo = msg.twist.twist.linear.y
+        self.vtheta_gazebo = msg.twist.twist.angular.z
+        
+        # reading the odometry from the gazebo plugin
+        self.x_odom_gazebo = msg.pose.pose.position.x
+        self.y_odom_gazebo = msg.pose.pose.position.y
+        q = msg.pose.pose.orientation
+        _, _, self.theta_odom_gazebo = tf_transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
+        
 
     def wheel_rot_speed_to_pwm_no_friction(self, rot: float) -> float:
         """Uses a simple linear model to map the expected rotational speed of the wheel to a constant PWM
@@ -958,7 +989,7 @@ class ZuuuHAL(Node):
         """
         # Odom
         odom = Odometry()
-        odom.header.frame_id = "odom"
+        odom.header.frame_id = "odom_zuuu"
         odom.header.stamp = self.measure_timestamp.to_msg()
         odom.child_frame_id = "base_footprint"
         odom.pose.pose.position.x = self.x_odom
@@ -974,7 +1005,7 @@ class ZuuuHAL(Node):
         odom.pose.pose.orientation.z = q[2]
         odom.pose.pose.orientation.w = q[3]
 
-        # TODO tune these numbers if needed
+        # Tune these numbers if needed
         odom.pose.covariance = np.diag([1e-2, 1e-2, 1e-2, 1e3, 1e3, 1e-1]).ravel()
         odom.twist.twist.linear.x = self.x_vel
         odom.twist.twist.linear.y = self.y_vel
@@ -1007,40 +1038,60 @@ class ZuuuHAL(Node):
         twist.angular.z = float(theta_vel)
         
         self.pub_fake_vel.publish(twist)
-        self.get_logger().info(f"Fake robot speed published: x={x_vel}, y={y_vel}, theta={theta_vel}")
 
     def tick_odom(self) -> None:
         """Updates the odometry values based on the small displacement measured since the last tick,
         then publishes the results with publish_odometry_and_tf()
         """
-        # Note: VESC speed values are, as is normal, very noisy at low speeds.
-        # We currently have no control on how the speeds are calculated.
-        # -> By reading the encoder ticks directly and making the calculations here we could maybe make this a tad better?
-
-        # Local speeds in egocentric frame.
-        # "rpm" are actually erpm and need to be divided by half the amount of magnetic poles to get the actual rpm.
-        self.x_vel, self.y_vel, self.theta_vel = self.dk_vel(
-            self.omnibase.left_wheel_rpm / self.omnibase.half_poles,
-            self.omnibase.right_wheel_rpm / self.omnibase.half_poles,
-            self.omnibase.back_wheel_rpm / self.omnibase.half_poles,
-        )
-        # self.get_logger().info(
-        #     "IK vel : {:.2f}, {:.2f}, {:.2f}".format(self.x_vel, self.y_vel, self.theta_vel))
-        # Applying the small displacement in the world-fixed odom frame (simple 2D rotation)
         dt_duration = self.measure_timestamp - self.old_measure_timestamp
         dt_seconds = dt_duration.nanoseconds / S_TO_NS
         if dt_seconds == 0:
             return
-        dx = (self.x_vel * math.cos(self.theta_odom) - self.y_vel * math.sin(self.theta_odom)) * dt_seconds
-        dy = (self.x_vel * math.sin(self.theta_odom) + self.y_vel * math.cos(self.theta_odom)) * dt_seconds
-        dtheta = self.theta_vel * dt_seconds
-        self.x_odom += dx
-        self.y_odom += dy
-        self.theta_odom += dtheta
+        if not self.fake_hardware:
+            # Note: VESC speed values are, as is normal, very noisy at low speeds.
+            # We currently have no control on how the speeds are calculated.
+            # -> By reading the encoder ticks directly and making the calculations here we could maybe make this a tad better?
 
+            # Local speeds in egocentric frame.
+            # "rpm" are actually erpm and need to be divided by half the amount of magnetic poles to get the actual rpm.
+            pole_factor = self.omnibase.half_poles
+            self.x_vel, self.y_vel, self.theta_vel = self.dk_vel(
+                self.omnibase.left_wheel_rpm * pole_factor,
+                self.omnibase.right_wheel_rpm * pole_factor,
+                self.omnibase.back_wheel_rpm * pole_factor,
+            )
+             # Applying the small displacement in the world-fixed odom frame (simple 2D rotation)
+            dx = (self.x_vel * math.cos(self.theta_odom) - self.y_vel * math.sin(self.theta_odom)) * dt_seconds
+            dy = (self.x_vel * math.sin(self.theta_odom) + self.y_vel * math.cos(self.theta_odom)) * dt_seconds
+            dtheta = self.theta_vel * dt_seconds
+            self.x_odom += dx
+            self.y_odom += dy
+            self.theta_odom += dtheta
+        else:
+            # Note: Using self.vx_gazebo and calculating the odometry from it as in the real case is a way of creating a noisy odometry
+            # That can be useful in certain situations. The version below uses the gazebo odometry directly which is much more precise.
+            self.x_vel = self.vx_gazebo
+            self.y_vel = self.vy_gazebo
+            self.theta_vel = self.vtheta_gazebo
+            # This is the small displacement in the world-fixed Gazebo odom frame (that never resets)
+            dx_gazebo = self.x_odom_gazebo - self.x_odom_gazebo_old
+            dy_gazebo = self.y_odom_gazebo - self.y_odom_gazebo_old
+            # Since our odom frame can reset, we must apply a 2D rotation to the displacement to get it in our odom frame
+            dx = dx_gazebo * math.cos(self.theta_zuuu_vs_gazebo) - dy_gazebo * math.sin(self.theta_zuuu_vs_gazebo)
+            dy = dx_gazebo * math.sin(self.theta_zuuu_vs_gazebo) + dy_gazebo * math.cos(self.theta_zuuu_vs_gazebo)
+            dtheta = angle_diff(self.theta_odom_gazebo, self.theta_odom_gazebo_old)
+            
+            self.x_odom += dx
+            self.y_odom += dy
+            self.theta_odom += dtheta
+            
+            self.x_odom_gazebo_old = self.x_odom_gazebo
+            self.y_odom_gazebo_old = self.y_odom_gazebo
+            self.theta_odom_gazebo_old = self.theta_odom_gazebo
+        
         self.vx = dx / dt_seconds
         self.vy = dy / dt_seconds
-        self.vtheta = dtheta / dt_seconds
+        self.vtheta = dtheta / dt_seconds    
         if self.reset_odom:
             # Resetting asynchronously to prevent race conditions.
             # dx, dy and dteta remain correct even on the reset tick
@@ -1049,10 +1100,16 @@ class ZuuuHAL(Node):
 
             # Resetting the odometry while a GoTo is ON might be dangerous. Stopping it to make sure:
             if self.goto_service_on:
+                self.get_logger().warning("Resetting the odometry while a GoTo is ON. Stopping the GoTo.")
                 self.goto_service_on = False
         self.publish_odometry_and_tf()
+        self.get_logger().info(f"Odom: x={self.x_odom:.2f}m, y={self.y_odom:.2f}m, theta={self.theta_odom:.2f}rad")
 
     def reset_odom_now(self):
+        if self.fake_hardware:
+            # TODO this is not enough, there is an accumulation of error when resetting the odometry in Gazebo mode
+            self.theta_zuuu_vs_gazebo-=self.theta_odom
+            
         self.x_odom = 0.0
         self.y_odom = 0.0
         self.theta_odom = 0.0
@@ -1385,6 +1442,7 @@ class ZuuuHAL(Node):
             if distance < self.xy_tol and abs(angle_diff(self.theta_goal, self.theta_odom)) < self.theta_tol:
                 self.goto_service_on = False
                 self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal =  0.0, 0.0, 0.0
+                self.get_logger().info("Reached the goal position !")
             else:
                 self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = self.position_control()
         else:
@@ -1439,7 +1497,7 @@ class ZuuuHAL(Node):
                 self.cmd_goto_tick()
 
             # Here, the following values have been calculated: self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal
-            # We'll apply filtering, safety checks, call the IK to get the wheel speeds and send them to the controller.
+            # We'll apply filtering, safety checks and then we'll call the IK to get the wheel speeds and send them to the controller.
             x_vel, y_vel, theta_vel = self.filter_speed_goals(self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal)
             x_vel, y_vel, theta_vel = self.lidar_safety.safety_check_speed_command(x_vel, y_vel, theta_vel)
             x_vel, y_vel, theta_vel = self.limit_vel_commands(x_vel, y_vel, theta_vel)
@@ -1468,12 +1526,13 @@ class ZuuuHAL(Node):
 
         self.old_measure_timestamp = self.measure_timestamp
         self.measure_timestamp = self.get_clock().now()
+        
         self.tick_odom()
         
 
     def main_tick(self, verbose: bool = False):
         """Main function of the HAL node. This function is made to be called often. Handles the main state machine"""
-        # Uncomment here to forbid the robot to move without a LIDAR scan
+        # Uncomment here to forbid the robot to move without a working LIDAR
         # if (not self.scan_is_read) or ((t - self.scan_t0) > self.scan_timeout):
         #     # If too much time without a LIDAR scan, the speeds are set to 0 for safety.
         #     self.get_logger().warning(
@@ -1490,8 +1549,7 @@ class ZuuuHAL(Node):
 
         self.control_tick(verbose)
         
-        # publish the safety status
-        # the safety status is published in the `mobile_base_safety_status` topic
+        # publish the safety status in the `mobile_base_safety_status` topic
         self.publish_mobile_base_state()
 
         if verbose:
