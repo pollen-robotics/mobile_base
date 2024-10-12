@@ -33,7 +33,7 @@ class FollowMe(Node):
         )
         self.subscription  # prevent unused variable warning... JESUS WHAT HAVE WE BECOME
 
-        self.cmd_pub = self.create_publisher(Twist, "cmd_vel", 10)
+        self.cmd_pub = self.create_publisher(Twist, "cmd_vel_zuuu", 10)
 
         self.lin_max_speed = 0.5
         self.rot_max_speed = 1.2

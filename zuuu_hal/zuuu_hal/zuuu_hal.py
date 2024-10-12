@@ -314,7 +314,8 @@ class ZuuuHAL(Node):
         self.theta_goal = 0.0
         self.reset_odom = False
         self.battery_voltage = 25.0
-        self.mode = ZuuuModes.CMD_GOTO
+        # self.mode = ZuuuModes.CMD_GOTO
+        self.mode = ZuuuModes.CMD_VEL
         self.speed_service_deadline = 0
         self.speed_service_on = False
         self.goto_service_on = False
@@ -347,11 +348,10 @@ class ZuuuHAL(Node):
 
         self.cmd_vel_sub = self.create_subscription(
             Twist,
-            "cmd_vel",
+            "cmd_vel_zuuu",
             self.cmd_vel_callback,
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT),
         )
-        self.cmd_vel_sub  # prevent unused variable warning... JESUS WHAT HAVE WE BECOME
 
         self.scan_sub = self.create_subscription(
             LaserScan,
@@ -371,7 +371,7 @@ class ZuuuHAL(Node):
 
         self.pub_odom = self.create_publisher(Odometry, "odom", 2)
         
-        self.pub_fake_vel = self.create_publisher(Twist, "cmd_vel_fake", QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))        
+        self.pub_fake_vel = self.create_publisher(Twist, "cmd_vel", 10)                
 
         self.mode_service = self.create_service(SetZuuuMode, "SetZuuuMode", self.handle_zuuu_mode)
 
