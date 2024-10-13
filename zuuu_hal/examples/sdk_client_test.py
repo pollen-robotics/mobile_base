@@ -19,9 +19,9 @@ print("Drawing a square of 1x1m")
 #     reachy.mobile_base.goto(x=0.0, y=1.0, theta=180.0, timeout=10000, tolerance={"delta_x": 0.05, "delta_y": 0.05, "delta_theta": 5.0, "distance": 0.05})
 #     reachy.mobile_base.goto(x=0.0, y=0.0, theta=270.0, timeout=10000, tolerance={"delta_x": 0.05, "delta_y": 0.05, "delta_theta": 5.0, "distance": 0.05})
 
-while True :
-    reachy.mobile_base.goto(x=1.0, y=1.0, theta=90.0, timeout=10000, tolerance={"delta_x": 0.05, "delta_y": 0.05, "delta_theta": 5.0, "distance": 0.05})
-    reachy.mobile_base.goto(x=0.0, y=0.0, theta=0.0, timeout=10000, tolerance={"delta_x": 0.05, "delta_y": 0.05, "delta_theta": 5.0, "distance": 0.05})
+# while True :
+#     reachy.mobile_base.goto(x=1.0, y=1.0, theta=90.0, timeout=10000, tolerance={"delta_x": 0.05, "delta_y": 0.05, "delta_theta": 5.0, "distance": 0.05})
+#     reachy.mobile_base.goto(x=0.0, y=0.0, theta=0.0, timeout=10000, tolerance={"delta_x": 0.05, "delta_y": 0.05, "delta_theta": 5.0, "distance": 0.05})
     
 
 while True :

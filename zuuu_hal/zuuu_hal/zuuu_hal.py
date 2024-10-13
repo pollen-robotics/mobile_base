@@ -20,8 +20,6 @@
     See params.yaml for the list of ROS parameters.
 """
 
-# - Safety lidar image
-
 import copy
 import math
 import os
@@ -328,8 +326,8 @@ class ZuuuHAL(Node):
         self.calculated_wheel_speeds = [0.0, 0.0, 0.0]
         self.reset_odom = False
         self.battery_voltage = 25.0
-        # self.mode = ZuuuModes.CMD_GOTO
-        self.mode = ZuuuModes.CMD_VEL
+        self.mode = ZuuuModes.CMD_GOTO
+        # self.mode = ZuuuModes.CMD_VEL
         self.speed_service_deadline = 0
         self.speed_service_on = False
         self.goto_service_on = False
