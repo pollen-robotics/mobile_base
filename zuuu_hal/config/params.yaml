@@ -16,3 +16,4 @@ zuuu_hal:
     smoothing_factor: 10.0
     safety_distance: 0.70 # distance from the center of the robot
     critical_distance: 0.55 # distance from the center of the robot
+    safety_on: true
