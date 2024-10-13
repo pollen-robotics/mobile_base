@@ -11,7 +11,6 @@ from sensor_msgs.msg import LaserScan
 
 from zuuu_hal.utils import angle_diff
 
-
 class LidarSafety:
     def __init__(
         self,
@@ -20,6 +19,7 @@ class LidarSafety:
         robot_collision_radius: float,
         speed_reduction_factor: float,
         logger,
+        fake_hardware: bool = False,
     ) -> None:
         """Utility class to reduce Zuuu's speed when the mobile base is too close to obstacles seen by the LIDAR.
         Functional behaviour:
@@ -35,6 +35,7 @@ class LidarSafety:
         self.critical_distance = critical_distance
         self.robot_collision_radius = robot_collision_radius
         self.speed_reduction_factor = speed_reduction_factor
+        self.fake_hardware = fake_hardware
         # List of [center_angle, angle_width]. e.g. the forbidden angle is center_angle +-angle_width
         self.unsafe_angles = []
         self.critical_angles = []
@@ -72,23 +73,33 @@ class LidarSafety:
         ranges = []
         intensities = []
         nb_critical = 0
+        angle_min_offset = 0.0
+        min_intensity = 0.1
+        if self.fake_hardware:
+            # In Gazebo the LIDAR always has an intesnity of 0.0, this disables the intensity check
+            min_intensity = -1.0
+        if self.fake_hardware:
+            angle_min_offset = -math.pi
         for i, r in enumerate(msg.ranges):
-            angle = msg.angle_min + i * msg.angle_increment
+            if math.isinf(r):
+                continue
+            angle = msg.angle_min + angle_min_offset+ i * msg.angle_increment
             ranges.append(0.0)
             intensities.append(0.0)
+            
             if r < 0.01:
                 # Code value for "no detection". e.g. the lidar filter that filters self collisions
                 # Adding an unsafe angle to avoid going fast where we're blind
                 self.unsafe_angles.append(self.create_forbidden_angles(angle, 0.25))
                 continue
             dist, _, _ = self.dist_to_point(r, angle)
-            if dist < self.critical_distance and (msg.intensities[i] > 0.1):
+            if dist < self.critical_distance and (msg.intensities[i] > min_intensity):
                 self.at_least_one_critical = True
                 self.critical_angles.append(self.create_forbidden_angles(angle, dist))
                 ranges[-1] = r
                 intensities[-1] = msg.intensities[i]
                 nb_critical += 1
-            elif dist < self.safety_distance and (msg.intensities[i] > 0.1):
+            elif dist < self.safety_distance and (msg.intensities[i] > min_intensity):
                 self.unsafe_angles.append(self.create_forbidden_angles(angle, dist))
 
     def safety_check_speed_command(self, x_vel: float, y_vel: float, theta_vel: float) -> List[float]:

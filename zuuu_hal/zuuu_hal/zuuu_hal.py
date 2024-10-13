@@ -340,6 +340,7 @@ class ZuuuHAL(Node):
             robot_collision_radius=0.5,
             speed_reduction_factor=1.0,
             logger=self.get_logger(),
+            fake_hardware=self.fake_hardware,
         )
         self.cv_bridge = CvBridge()
 
@@ -734,8 +735,11 @@ class ZuuuHAL(Node):
         filtered_scan.range_max = msg.range_max
         ranges = []
         intensities = []
+        angle_min_offset = 0.0
+        if self.fake_hardware:
+            angle_min_offset = -math.pi
         for i, r in enumerate(msg.ranges):
-            angle = msg.angle_min + i * msg.angle_increment
+            angle = msg.angle_min + angle_min_offset + i * msg.angle_increment
             if angle > self.laser_upper_angle or angle < self.laser_lower_angle:
                 ranges.append(0.0)
                 intensities.append(0.0)

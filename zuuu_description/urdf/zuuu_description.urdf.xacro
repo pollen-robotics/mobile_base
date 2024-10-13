@@ -210,7 +210,7 @@
       <!-- The -0.0129 were added on 22 April 2022 for the second version of Zuuu. The 2mm pads are
       not taken into account -->
       <!-- <origin xyz="0.155 0 ${-(base_top_height-base_depth/2)+base_top_height+0.105 -0.0129}" rpy="0 0 0" /> -->
-      <origin xyz="0.184 0 0.25" rpy="0 0 0"/>
+      <origin xyz="0.184 0 0.25" rpy="0 0 3.141592653589793"/>
     </joint>
 
   </xacro:macro>
