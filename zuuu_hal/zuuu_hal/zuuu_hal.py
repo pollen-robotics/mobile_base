@@ -49,7 +49,7 @@ from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from reachy_utils.config import ReachyConfig
 from sensor_msgs.msg import Image, LaserScan
-from std_msgs.msg import Float32, Float32MultiArray
+from std_msgs.msg import Float32
 from pollen_msgs.msg import MobileBaseState
 from tf2_ros import TransformBroadcaster
 from zuuu_interfaces.srv import (
@@ -79,6 +79,7 @@ class ZuuuModes(Enum):
     SPEED =  Mode used by the set_speed service to do speed control over arbitrary duration
     GOTO =  Mode used by the go_to_xytheta service to do position control in odom frame
     EMERGENCY_STOP =  Calls the emergency_shutdown method
+    CMD_GOTO = Behaves like CMD_VEL but uses the odometry to correct the commands
     """
     CMD_VEL = 1
     BRAKE = 2
@@ -327,8 +328,8 @@ class ZuuuHAL(Node):
         self.calculated_wheel_speeds = [0.0, 0.0, 0.0]
         self.reset_odom = False
         self.battery_voltage = 25.0
-        self.mode = ZuuuModes.CMD_GOTO
-        # self.mode = ZuuuModes.CMD_VEL
+        # self.mode = ZuuuModes.CMD_GOTO
+        self.mode = ZuuuModes.CMD_VEL
         self.speed_service_deadline = 0
         self.speed_service_on = False
         self.goto_service_on = False
@@ -1126,7 +1127,8 @@ class ZuuuHAL(Node):
                 self.get_logger().warning("Resetting the odometry while a GoTo is ON. Stopping the GoTo.")
                 self.goto_service_on = False
         self.publish_odometry_and_tf()
-        self.get_logger().info(f"Odom: x={self.x_odom:.2f}m, y={self.y_odom:.2f}m, theta={self.theta_odom:.2f}rad")
+        self.get_logger().info(f"XXX Odom: x={self.x_odom:.2f}m, y={self.y_odom:.2f}m, theta={self.theta_odom:.2f}rad")
+        self.get_logger().info(f"mode={self.mode.name}")
 
     def reset_odom_now(self):
         if self.fake_hardware:
@@ -1573,7 +1575,7 @@ class ZuuuHAL(Node):
             f = 1.0 / dt
         self.get_logger().info("zuuu tick potential freq: {:.0f}Hz (dt={:.0f}ms)".format(f, 1000 * dt))
 
-    def main_tick(self, verbose: bool = True):
+    def main_tick(self, verbose: bool = False):
         """Main function of the HAL node. This function is made to be called often. Handles the main state machine"""
         t = time.time()
         if self.lidar_mandatory and not self.check_for_lidar_scan(t):

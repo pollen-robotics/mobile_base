@@ -85,7 +85,7 @@ class JoyTeleop(Node):
             self.emergency_shutdown()
         self.get_logger().info("nb joysticks: {}".format(self.nb_joy))
         self.j = pygame.joystick.Joystick(0)
-        self.lin_speed_ratio = 0.15
+        self.lin_speed_ratio = 0.5
         self.rot_speed_ratio = 1.5
         # The joyticks dont come back at a perfect 0 position when released.
         # Any abs(value) below min_joy_position will be assumed to be 0
