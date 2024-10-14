@@ -22,6 +22,7 @@
 
 import copy
 import math
+import threading
 import os
 import sys
 import time
@@ -31,12 +32,14 @@ from csv import writer
 from enum import Enum
 from subprocess import check_output
 from typing import List
-
 import numpy as np
 import rclpy
 import rclpy.logging
 import tf_transformations
 from cv_bridge import CvBridge
+from tf2_ros import TransformBroadcaster
+from sensor_msgs.msg import Image, LaserScan
+from std_msgs.msg import Float32
 from geometry_msgs.msg import TransformStamped, Twist
 from nav_msgs.msg import Odometry
 from pyvesc.VESC import MultiVESC
@@ -45,11 +48,17 @@ from rclpy.constants import S_TO_NS
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile, ReliabilityPolicy
+
+
+# from pollen_msgs.action import ZuuuGoto
+from rclpy.action import ActionServer, CancelResponse, GoalResponse
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
+
+
 from reachy_utils.config import ReachyConfig
-from sensor_msgs.msg import Image, LaserScan
-from std_msgs.msg import Float32
+
 from pollen_msgs.msg import MobileBaseState
-from tf2_ros import TransformBroadcaster
 from zuuu_interfaces.srv import (
     DistanceToGoal,
     GetBatteryVoltage,
@@ -66,6 +75,7 @@ from zuuu_interfaces.srv import (
 
 from zuuu_hal.lidar_safety import LidarSafety
 from zuuu_hal.utils import PID, angle_diff, sign
+from zuuu_hal.zuuu_goto_action_server import ZuuuGotoActionServer
 
 
 class ZuuuModes(Enum):
@@ -185,7 +195,7 @@ class MobileBase:
 class ZuuuHAL(Node):
     """Zuuu's Hardware Abstraction Layer node"""
 
-    def __init__(self) -> None:
+    def __init__(self, shared_callback_group) -> None:
         """Node initialisation.
         ROS side: setup of the timers, callbacks, topics, services and parameters.
         Low level side: connecting with the hardware and making a first read of the sensors.
@@ -194,6 +204,8 @@ class ZuuuHAL(Node):
         """
         super().__init__("zuuu_hal")
         self.get_logger().info("Starting zuuu_hal!")
+        
+        self.goto_action_server = ZuuuGotoActionServer(self, shared_callback_group)
         
         self.declare_parameter('fake_hardware', False)
         self.fake_hardware = self.get_parameter('fake_hardware').value
@@ -654,13 +666,14 @@ class ZuuuHAL(Node):
         string_status = self.lidar_safety.obstacle_detection_status
 
         # string to float conversion using the mobile_base_lidar.proto file
+        # [0: detection error, 1: no obstacle, 2: obstacle detected slowing down, 3: obstacle detected stopping]
         status = 0  # no object detected (DETECTION_ERROR)
         if string_status == "green":
             status = 1.0  # no object detected (NO_OBJECT_DETECTED)
         elif string_status == "orange":
-            status = 1.0  # object detected but not critical (OBJECT_DETECTED_SLOWDOWN)
+            status = 2.0  # object detected but not critical (OBJECT_DETECTED_SLOWDOWN)
         elif string_status == "red":
-            status = 2.0  # object detected and critical (OBJECT_DETECTED_STOP)
+            status = 3.0  # object detected and critical (OBJECT_DETECTED_STOP)
 
         msg.safety_on.data = self.safety_on
         # construct the Float32MultiArray message
@@ -1456,20 +1469,6 @@ class ZuuuHAL(Node):
                 self.get_logger().info("End of set speed duration, setting speeds to 0")
             self.speed_service_on = False
             self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal =  0.0, 0.0, 0.0
-            
-    def goto_tick(self)-> None:
-        """Tick function for the goto mode. Will calculate the robot's speed to reach a goal pose in the odometry frame.
-        """
-        if self.goto_service_on:
-            distance = math.sqrt((self.x_goal - self.x_odom) ** 2 + (self.y_goal - self.y_odom) ** 2)
-            if distance < self.xy_tol and abs(angle_diff(self.theta_goal, self.theta_odom)) < self.theta_tol:
-                self.goto_service_on = False
-                self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal =  0.0, 0.0, 0.0
-                self.get_logger().info("Reached the goal position !")
-            else:
-                self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = self.position_control()
-        else:
-            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal =  0.0, 0.0, 0.0
     
     def cmd_goto_tick(self):
         t = time.time()
@@ -1598,11 +1597,28 @@ def main(args=None) -> None:
     """Run ZuuuHAL main loop"""
     rclpy.init(args=args)
     
-    node = ZuuuHAL()
-    rclpy.logging._root_logger.error("ZuuuHAL node started!!!!!!!!!!!!!!!!!!!!!!")
-    rclpy.logging._root_logger.error("Going to spin!!!!!!!!!!!!!!!!!!!!!!")
-    rclpy.spin(node)
+    
+    callback_group = MutuallyExclusiveCallbackGroup() # ReentrantCallbackGroup() brings bad memories, avoiding it if possible
+    
 
+    zuuu_hal = ZuuuHAL(callback_group)
+
+    mult_executor = MultiThreadedExecutor()
+    mult_executor.add_node(zuuu_hal)
+    mult_executor.add_node(zuuu_hal.goto_action_server)
+    executor_thread = threading.Thread(target=mult_executor.spin, daemon=True)
+    executor_thread.start()
+    rate = zuuu_hal.create_rate(2.0)
+
+    try:
+        while rclpy.ok():
+            rate.sleep()
+    except KeyboardInterrupt:
+        pass
+    rclpy.shutdown()
+    executor_thread.join()
+    
+    
     # try:
 
         
