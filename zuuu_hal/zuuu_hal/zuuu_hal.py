@@ -308,9 +308,11 @@ class ZuuuHAL(Node):
         )
         self.cv_bridge = CvBridge()
 
-        self.x_pid = PID(p=3.0, i=0.00, d=0.0, max_command=0.5, max_i_contribution=0.0)
-        self.y_pid = PID(p=3.0, i=0.00, d=0.0, max_command=0.5, max_i_contribution=0.0)
-        self.theta_pid = PID(p=1.0, i=0.0, d=0.00, max_command=4.0, max_i_contribution=1.0)
+        # Values tunned on a Reachy 2 15/10/2024
+        self.x_pid = PID(p=5.0, i=0.00, d=0.0, max_command=0.4, max_i_contribution=0.0)
+        self.y_pid = PID(p=5.0, i=0.00, d=0.0, max_command=0.4, max_i_contribution=0.0)
+        self.theta_pid = PID(p=5.0, i=0.0, d=0.00, max_command=1.0, max_i_contribution=1.0)
+        
         # "No over-shoot Ziegler Nichols"
         # self.theta_pid = PID(p=3.2, i=14.2, d=0.475,
         #                      max_command=4.0, max_i_contribution=1.0)
