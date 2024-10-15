@@ -11,3 +11,7 @@ float64 angle_tol
 
 # Timeout (s)
 float64 timeout
+
+# PIDs
+
+# Behavior when arrived (ON/off control)

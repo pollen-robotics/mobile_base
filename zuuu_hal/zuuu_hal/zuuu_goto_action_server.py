@@ -163,6 +163,7 @@ class ZuuuGotoActionServer(Node):
     def goto_tick(self)-> None:
         """Tick function for the goto mode. Will calculate the robot's speed to reach a goal pose in the odometry frame.
         """
+        # TODO gaffe à ne pas partager les PID entre goto et cmd_goto
         if self.zuuu_hal.mode is ZuuuModes.GOTO :
             distance = math.sqrt((self.x_goal - self.x_odom) ** 2 + (self.y_goal - self.y_odom) ** 2)
             if distance < self.xy_tol and abs(angle_diff(self.theta_goal, self.theta_odom)) < self.theta_tol:
