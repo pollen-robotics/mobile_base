@@ -211,47 +211,133 @@ async def blocking_demo(action_client):
 
 
 
-# async def non_blocking_demo(action_client, loop):
-#     logger = rclpy.logging.get_logger("mobile_base_goto_action_client")
+async def non_blocking_demo(action_client, loop):
+    logger = rclpy.logging.get_logger("mobile_base_goto_action_client")
 
-#     logger.info(f"$$$$$$ EXAMPLE 2: simultaneous async calls")
-#     my_task1 = loop.create_task(
-#         action_client.send_goal("r_arm", ["r_shoulder_pitch"], [-1.0], 2.0)
-#     )
-#     my_task2 = loop.create_task(
-#         action_client.send_goal("l_arm", ["l_shoulder_pitch"], [-1.0], 2.0)
-#     )
-#     my_task3 = loop.create_task(
-#         action_client.send_goal("neck", ["neck_roll"], [0.2], 2.0)
-#     )
-#     logger.info(f"Gluing tasks and waiting")
+    logger.info(f"$$$$$$ EXAMPLE 2: simultaneous async calls")
+    my_task1 = loop.create_task(
+        action_client.send_goal(
+        1.0,
+        1.0,
+        np.deg2rad(45),
+        0.05,
+        np.deg2rad(5),
+        10.0,
+        True,
+        5.0,
+        0.0,
+        0.0,
+        0.4,
+        5.0,
+        0.0,
+        0.0,
+        1.0,
+        feedback_callback=action_client.feedback_callback_default,
+        )
+    )
+    my_task2 = loop.create_task(
+        action_client.send_goal(
+        1.0,
+        2.0,
+        np.deg2rad(45),
+        0.05,
+        np.deg2rad(5),
+        10.0,
+        True,
+        5.0,
+        0.0,
+        0.0,
+        0.4,
+        5.0,
+        0.0,
+        0.0,
+        1.0,
+        feedback_callback=action_client.feedback_callback_default,
+        )
+    )
+    
+    my_task3 = loop.create_task(
+        action_client.send_goal(
+        1.0,
+        2.0,
+        np.deg2rad(180.0),
+        0.05,
+        np.deg2rad(5),
+        10.0,
+        True,
+        5.0,
+        0.0,
+        0.0,
+        0.4,
+        5.0,
+        0.0,
+        0.0,
+        1.0,
+        feedback_callback=action_client.feedback_callback_default,
+        )
+    )
 
-#     wait_future = asyncio.wait([my_task1, my_task2, my_task3])
-#     # run event loop
-#     finished, unfinished = await wait_future
-#     logger.info(f"unfinished: {len(unfinished)}")
-#     for task in finished:
-#         result, status = task.result()
-#         logger.info(f"Result: {result.result.status}")
+    logger.info(f"Gluing tasks and waiting")
 
-#     logger.info(f"$$$$$$ EXAMPLE 2: Going back to start position")
-#     my_task1 = loop.create_task(
-#         action_client.send_goal("r_arm", ["r_shoulder_pitch"], [0.0], 2.0)
-#     )
-#     my_task2 = loop.create_task(
-#         action_client.send_goal("l_arm", ["l_shoulder_pitch"], [0.0], 2.0)
-#     )
-#     my_task3 = loop.create_task(
-#         action_client.send_goal("neck", ["neck_roll"], [0.0], 2.0)
-#     )
-#     logger.info(f"Gluing tasks and waiting")
-#     wait_future = asyncio.wait([my_task1, my_task2, my_task3])
-#     # run event loop
-#     finished, unfinished = await wait_future
-#     logger.info(f"unfinished: {len(unfinished)}")
-#     for task in finished:
-#         result, status = task.result()
-#         logger.info(f"Result: {result.result.status}")
+    wait_future = asyncio.wait([my_task1, my_task2, my_task3])
+    # run event loop
+    finished, unfinished = await wait_future
+    logger.info(f"unfinished: {len(unfinished)}")
+    for task in finished:
+        result, status = task.result()
+        logger.info(f"Result: {result.result.status}")
+
+    logger.info(f"$$$$$$ EXAMPLE 2: Going back to start position")
+
+    my_task1 = loop.create_task(
+        action_client.send_goal(
+        0.0,
+        0.0,
+        np.deg2rad(180.0),
+        0.05,
+        np.deg2rad(5),
+        10.0,
+        True,
+        5.0,
+        0.0,
+        0.0,
+        0.4,
+        5.0,
+        0.0,
+        0.0,
+        1.0,
+        feedback_callback=action_client.feedback_callback_default,
+        )
+    )
+    my_task2 = loop.create_task(
+        action_client.send_goal(
+        0.0,
+        0.0,
+        np.deg2rad(0.0),
+        0.05,
+        np.deg2rad(5),
+        10.0,
+        True,
+        5.0,
+        0.0,
+        0.0,
+        0.4,
+        5.0,
+        0.0,
+        0.0,
+        1.0,
+        feedback_callback=action_client.feedback_callback_default,
+        )
+    )
+
+    logger.info(f"Gluing tasks and waiting")
+    wait_future = asyncio.wait([my_task1, my_task2])
+    # run event loop
+    finished, unfinished = await wait_future
+    logger.info(f"unfinished: {len(unfinished)}")
+    for task in finished:
+        result, status = task.result()
+        logger.info(f"Result: {result.result.status}")
 
 
 
@@ -300,40 +386,54 @@ async def blocking_demo(action_client):
 #     #     await goal_handle.cancel_goal_async()
 
 
-# async def cancel_demo(action_client, loop):
-#     logger = rclpy.logging.get_logger("mobile_base_goto_action_client")
-#     logger.info(f"$$$$$$ EXAMPLE 5: cancel demo")
+async def cancel_demo(action_client, loop):
+    logger = rclpy.logging.get_logger("mobile_base_goto_action_client")
+    logger.info(f"$$$$$$ EXAMPLE 3: cancel demo")
 
-#     p = [7.53, -22.16, -30.57, -69.92, 14.82, 20.59, 18.28]
+    goal_handle = await action_client.send_goal(
+        1.0,
+        0.0,
+        0.0,
+        0.05,
+        np.deg2rad(5),
+        10.0,
+        True,
+        5.0,
+        0.0,
+        0.0,
+        0.4,
+        5.0,
+        0.0,
+        0.0,
+        1.0,
+        return_handle=True,
+        feedback_callback=action_client.feedback_callback_default
+    )
+    
+    await asyncio.sleep(1.0)
+    await goal_handle.cancel_goal_async()
+    logger.info(f"Goal canceled!")
+    await asyncio.sleep(3.0)
 
-#     joint_names = [
-#         "r_shoulder_pitch",
-#         "r_shoulder_roll",
-#         "r_elbow_yaw",
-#         "r_elbow_pitch",
-#         "r_wrist_roll",
-#         "r_wrist_pitch",
-#         "r_wrist_yaw",
-#     ]
-
-#     # Setting values of p to radians
-#     p = [np.deg2rad(i) for i in p]
-#     goal_handle = await action_client.send_goal(
-#         "r_arm",
-#         joint_names,
-#         p,
-#         2.0,
-#         return_handle=True,
-#         feedback_callback=action_client.feedback_callback_default,
-#     )
-#     await asyncio.sleep(1.0)
-#     await goal_handle.cancel_goal_async()
-#     logger.info(f"Goal canceled!")
-
-#     logger.info(f"Going back to 0")
-
-#     p = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-#     await action_client.send_goal("r_arm", joint_names, p, 2.0)
+    logger.info(f"Going back to 0")
+    await action_client.send_goal(
+        0.0,
+        0.0,
+        0.0,
+        0.05,
+        np.deg2rad(5),
+        10.0,
+        True,
+        5.0,
+        0.0,
+        0.0,
+        0.4,
+        5.0,
+        0.0,
+        0.0,
+        1.0,
+        return_handle=False,
+    )
 
 
 
@@ -348,20 +448,19 @@ async def run_demo(args, loop):
     spin_task = loop.create_task(spinning(action_client))
 
     # # Demo 1: blocking calls
-    await blocking_demo(action_client)
+    # await blocking_demo(action_client)
 
     # # Demo 2: non-blocking calls called simultaneously
-    # await non_blocking_demo(action_client, loop)
+    await non_blocking_demo(action_client, loop)
 
-    # # Demo 3: non-blocking calls called with a delay
-    # await non_blocking_demo_delay(action_client, loop)
+    # # Demo 3: cancel
+    # await cancel_demo(action_client, loop)
 
     # # Demo 4: square
     # # while True:
     # await square_demo(action_client, loop)
 
-    # # Demo 5: cancel
-    # await cancel_demo(action_client, loop)
+
 
     # # Demo 6: continuous speed
     # await continuous_speed_demo(action_client, loop)

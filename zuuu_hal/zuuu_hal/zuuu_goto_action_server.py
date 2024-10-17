@@ -99,9 +99,16 @@ class ZuuuGotoActionServer(Node):
         ret = self.goto_time(goal_handle, goto_request)
         if ret == "no_longer_goto_mode":
             # Removing all the goals from the queue for safety
-            self.get_logger().warning(f"A mode change happened during the goto execution. Removing all ({self._goal_queue}) goals from the queue.")
+            self.get_logger().warning(f"A mode change happened during the goto execution. Removing all ({self._goal_queue.qsize()}) goals from the queue.")
             while not self._goal_queue.empty():
-                self._goal_queue.get().abort()
+                server_goal_handle = self._goal_queue.get()
+                server_goal_handle.canceled()
+                server_goal_handle.destroy()
+        if ret == "canceled":
+            q_size = self._goal_queue.qsize()
+            if q_size == 0:
+                self.get_logger().info(f"Goal canceled and no other goals in the queue => Brake mode")
+                self.zuuu_hal.mode = ZuuuModes.BRAKE     
         elif not self.keep_control_on_arrival:
             # Chaging the mode to BRAKE when the goal is reached
             self.zuuu_hal.mode = ZuuuModes.BRAKE
@@ -134,8 +141,9 @@ class ZuuuGotoActionServer(Node):
             # TODO do this only if the queue is not empty
             self.get_logger().info(f"Switching from {self.zuuu_hal.mode} mode to GOTO. Removing all ({self._goal_queue}) goals from the queue for safety.")
             while not self._goal_queue.empty():
-                self._goal_queue.get().abort()
-        self.zuuu_hal.mode = ZuuuModes.GOTO
+                server_goal_handle = self._goal_queue.get()
+                server_goal_handle.canceled()
+                server_goal_handle.destroy()
     
     def goto_time(self, goal_handle, goto_request):
         """Blocking function that sends commands to the mobile base to reach a goal pose in the odometry frame.
@@ -172,9 +180,8 @@ class ZuuuGotoActionServer(Node):
 
             # Publishing feedback every nb_commands_per_feedback ticks
             commands_sent += 1
-            if commands_sent % self.nb_commands_per_feedback == 0:
+            if commands_sent % self.nb_commands_per_feedback == 0:                
                 self.generate_and_publish_feedback(goal_handle, distance_error, angle_error)
-
 
             # self.rate.sleep()  # Slowly the output freq drops with this... A bug I could not find.
             time.sleep(max(0, dt - (time.time() - t0_loop)))
