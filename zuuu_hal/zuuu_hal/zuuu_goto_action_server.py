@@ -6,7 +6,7 @@ import math
 
 import numpy as np
 import rclpy
-from zuuu_description.action import ZuuuGoto
+from zuuu_interfaces.action import ZuuuGoto
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import (
     MutuallyExclusiveCallbackGroup,
@@ -14,8 +14,8 @@ from rclpy.callback_groups import (
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 
-from zuuu_hal.utils import PID, angle_diff
-from zuuu_hal.zuuu_hal import ZuuuModes
+from zuuu_hal.utils import PID, angle_diff, ZuuuModes, ZuuuControlModes
+
 
 class ZuuuGotoActionServer(Node):
     def __init__(self, zuuu_hal, shared_callback_group):
@@ -117,6 +117,8 @@ class ZuuuGotoActionServer(Node):
     def setup_goto(self, goto_request):
         """Setup the goto with the parameters from the request"""
         # Note: the PID values have default values in the goto_request message
+        # Setting zuuu_hal mode to GOTO
+        self.zuuu_hal.mode = ZuuuModes.GOTO
         self.distance_pid = PID(p=goto_request.distance_p, i=goto_request.distance_i, d=goto_request.distance_d, max_command=goto_request.distance_max_command, max_i_contribution=None)
         self.angle_pid = PID(p=goto_request.angle_p, i=goto_request.angle_i, d=goto_request.angle_d, max_command=goto_request.angle_max_command, max_i_contribution=None)
         self.dist_tol = goto_request.dist_tol
@@ -184,7 +186,7 @@ class ZuuuGotoActionServer(Node):
         
     def generate_and_publish_feedback(self, goal_handle, distance_error, angle_error):
         feedback_msg = ZuuuGoto.Feedback()
-        feedback_msg.header.stamp = self.get_clock().now().to_msg()
+        feedback_msg.feedback.header.stamp = self.get_clock().now().to_msg()
         feedback_msg.feedback.distance_error = distance_error
         feedback_msg.feedback.angle_error = angle_error
         goal_handle.publish_feedback(feedback_msg)
@@ -193,10 +195,10 @@ class ZuuuGotoActionServer(Node):
     def goto_tick(self):
         """Tick function for the goto mode. Will calculate the robot's speed to reach a goal pose in the odometry frame.
         """
-        dx = self.zuuu_hal.x_goal - self.zuuu_hal.x_odom
-        dy = self.zuuu_hal.y_goal - self.zuuu_hal.y_odom
+        dx = -self.zuuu_hal.x_goal + self.zuuu_hal.x_odom
+        dy = -self.zuuu_hal.y_goal + self.zuuu_hal.y_odom
         distance_error = math.sqrt(dx ** 2 + dy ** 2)
-        angle_error = angle_diff(self.zuuu_hal.theta_goal, self.zuuu_hal.theta_odom)
+        angle_error = -angle_diff(self.zuuu_hal.theta_goal, self.zuuu_hal.theta_odom)
         arrived = False
         if distance_error < self.dist_tol and abs(angle_error) < self.angle_tol:
             self.zuuu_hal.x_vel_goal, self.zuuu_hal.y_vel_goal, self.zuuu_hal.theta_vel_goal =  0.0, 0.0, 0.0

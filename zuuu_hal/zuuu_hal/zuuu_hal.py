@@ -29,7 +29,6 @@ import time
 import traceback
 from collections import deque
 from csv import writer
-from enum import Enum
 from subprocess import check_output
 from typing import List
 import numpy as np
@@ -74,52 +73,8 @@ from zuuu_interfaces.srv import (
 )
 
 from zuuu_hal.lidar_safety import LidarSafety
-from zuuu_hal.utils import PID, angle_diff, sign
+from zuuu_hal.utils import PID, angle_diff, sign, ZuuuModes, ZuuuControlModes
 from zuuu_hal.zuuu_goto_action_server import ZuuuGotoActionServer
-
-
-class ZuuuModes(Enum):
-    """
-    Zuuu drive modes
-    CMD_VEL = The commands read on the topic /cmd_vel are applied after smoothing
-    BRAKE =  Sets the PWMs to 0 effectively braking the base
-    FREE_WHEEL =  Sets the current control to 0, coast mode
-    SPEED =  Mode used by the set_speed service to do speed control over arbitrary duration
-    GOTO =  Mode used by the go_to_xytheta service to do position control in odom frame
-    EMERGENCY_STOP =  Calls the emergency_shutdown method
-    CMD_GOTO = Behaves like CMD_VEL but uses the odometry to correct the commands
-    """
-    CMD_VEL = 1
-    BRAKE = 2
-    FREE_WHEEL = 3
-    SPEED = 4
-    GOTO = 5
-    EMERGENCY_STOP = 6
-    CMD_GOTO = 7
-    
-    @classmethod
-    def speed_modes(cls):
-        """Returns a list of modes considered as speed modes."""
-        return [cls.CMD_VEL, cls.SPEED, cls.GOTO, cls.CMD_GOTO]
-
-    @classmethod
-    def stop_modes(cls):
-        """Returns a list of modes considered as stop modes."""
-        return [cls.BRAKE, cls.FREE_WHEEL, cls.EMERGENCY_STOP]
-
-
-class ZuuuControlModes(Enum):
-    """
-    Zuuu control modes
-    OPEN_LOOP = The HAL will send PWM commands to the controllers.
-    PID = The HAL will send speed commands to the controllers, the control is made by the low level PIDs
-    """
-
-    OPEN_LOOP = 1
-    PID = 2
-
-# CMD_VEL, SPEED, GOTO and CMD_GOTO should be in a SPEED_MODES group
-# BRAKE, FREE_WHEEL and EMERGENCY_STOP should be in a STOP_MODES group
 
 
 
@@ -1149,7 +1104,6 @@ class ZuuuHAL(Node):
                 self.goto_service_on = False
         self.publish_odometry_and_tf()
         self.get_logger().info(f"XXX Odom: x={self.x_odom:.2f}m, y={self.y_odom:.2f}m, theta={self.theta_odom:.2f}rad")
-        self.get_logger().info(f"mode={self.mode.name}")
 
     def reset_odom_now(self):
         if self.fake_hardware:

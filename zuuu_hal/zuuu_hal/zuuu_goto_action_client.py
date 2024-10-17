@@ -5,7 +5,7 @@ import numpy as np
 
 from action_msgs.msg import GoalStatus
 
-from zuuu_description.action import ZuuuGoto
+from zuuu_interfaces.action import ZuuuGoto
 
 
 from rclpy.action import ActionClient
@@ -46,7 +46,8 @@ class ZuuuGotoActionClient(Node):
         feedback_callback=None,
         return_handle=False,
     ):
-        goal_msg = GoalStatus.Goal()
+        goal_msg = ZuuuGoto.Goal()
+        
         request = goal_msg.request  # This is of type zuuu_interfaces/ZuuuGotoRequest
         
         request.x_goal = x_goal
