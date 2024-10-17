@@ -1434,6 +1434,33 @@ class ZuuuHAL(Node):
             self.speed_service_on = False
             self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal =  0.0, 0.0, 0.0
     
+    def goto_tick(self):
+        """Tick function for the goto mode. Will calculate the robot's speed to reach a goal pose in the odometry frame.
+        """
+        dx = -self.x_goal + self.x_odom
+        dy = -self.y_goal + self.y_odom
+        distance_error = math.sqrt(dx ** 2 + dy ** 2)
+        angle_error = -angle_diff(self.theta_goal, self.theta_odom)
+        arrived = False
+
+        dist_command = self.distance_pid.tick(distance_error)
+        angle_command = self.angle_pid.tick(angle_error, is_angle=True)
+        # The vector (dx, dy) is the vector from the robot to the goal in the odom frame
+        # Transforming that vector from the world-fixed odom frame to the robot-fixed frame
+        x_command = dx * math.cos(-self.theta_odom) - dy * math.sin(-self.theta_odom)
+        y_command = dx * math.sin(-self.theta_odom) + dy * math.cos(-self.theta_odom)
+        # Normalizing. The (x_command, y_command) vector is now a unit vector pointing towards the goal in the robot frame
+        x_command = x_command / distance_error 
+        y_command = y_command / distance_error
+        # Scaling the command vector by the PID output
+        x_command *= dist_command
+        y_command *= dist_command
+        
+        # No transformations to do with the angle_command as the Z odom axis is coolinear with the Z robot axis
+        self.x_vel_goal = x_command
+        self.y_vel_goal = y_command
+        self.theta_vel_goal = angle_command  
+    
     def cmd_goto_tick(self):
         t = time.time()
         # If too much time without an order, the speeds are smoothed back to 0 for safety.
@@ -1479,8 +1506,7 @@ class ZuuuHAL(Node):
             elif self.mode is ZuuuModes.SPEED:
                 self.speed_mode_tick()
             elif self.mode is ZuuuModes.GOTO:
-                # This mode is handled by the Goto Action Server
-                return
+                self.goto_tick()
             elif self.mode is ZuuuModes.CMD_GOTO:
                 self.cmd_goto_tick()
             # Here, the following values have been calculated: self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal

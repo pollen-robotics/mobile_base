@@ -117,19 +117,25 @@ class ZuuuGotoActionServer(Node):
     def setup_goto(self, goto_request):
         """Setup the goto with the parameters from the request"""
         # Note: the PID values have default values in the goto_request message
-        # Setting zuuu_hal mode to GOTO
-        self.zuuu_hal.mode = ZuuuModes.GOTO
-        self.distance_pid = PID(p=goto_request.distance_p, i=goto_request.distance_i, d=goto_request.distance_d, max_command=goto_request.distance_max_command, max_i_contribution=None)
-        self.angle_pid = PID(p=goto_request.angle_p, i=goto_request.angle_i, d=goto_request.angle_d, max_command=goto_request.angle_max_command, max_i_contribution=None)
-        self.dist_tol = goto_request.dist_tol
-        self.angle_tol = goto_request.angle_tol
         self.keep_control_on_arrival = goto_request.keep_control_on_arrival
-        self.distance_pid.set_goal(0.0)
-        self.angle_pid.set_goal(0.0)
+        # Most values are stored in the zuuu_hal object as they are used in the control loop
+        self.zuuu_hal.distance_pid = PID(p=goto_request.distance_p, i=goto_request.distance_i, d=goto_request.distance_d, max_command=goto_request.distance_max_command, max_i_contribution=None)
+        self.zuuu_hal.angle_pid = PID(p=goto_request.angle_p, i=goto_request.angle_i, d=goto_request.angle_d, max_command=goto_request.angle_max_command, max_i_contribution=None)
+        self.zuuu_hal.dist_tol = goto_request.dist_tol
+        self.zuuu_hal.angle_tol = goto_request.angle_tol
+        self.zuuu_hal.distance_pid.set_goal(0.0)
+        self.zuuu_hal.angle_pid.set_goal(0.0)
         # Setting the goal values in zuuu_hal to keep compliance with e.g. DistanceToGoal service resquest
         self.zuuu_hal.x_goal = goto_request.x_goal
         self.zuuu_hal.y_goal = goto_request.y_goal
         self.zuuu_hal.theta_goal = goto_request.theta_goal
+        # Setting zuuu_hal mode to GOTO
+        if self.zuuu_hal.mode is not ZuuuModes.GOTO:
+            # TODO do this only if the queue is not empty
+            self.get_logger().info(f"Switching from {self.zuuu_hal.mode} mode to GOTO. Removing all ({self._goal_queue}) goals from the queue for safety.")
+            while not self._goal_queue.empty():
+                self._goal_queue.get().abort()
+        self.zuuu_hal.mode = ZuuuModes.GOTO
     
     def goto_time(self, goal_handle, goto_request):
         """Blocking function that sends commands to the mobile base to reach a goal pose in the odometry frame.
@@ -154,9 +160,8 @@ class ZuuuGotoActionServer(Node):
                 goal_handle.abort()
                 return "timeout"
             if self.zuuu_hal.mode is ZuuuModes.GOTO :     
-                # Performing the control calculations and updating the speed commands in zuuu_hal
-                arrived, distance_error, angle_error = self.goto_tick()
-                self.zuuu_hal.process_velocity_goals_and_send_wheel_commands()
+                # The control calculations and speed commands updates are performed in the zuuu_hal control loop
+                arrived, distance_error, angle_error = self.check_goto_arrived()
                 if arrived:
                     goal_handle.succeed()
                     return "finished"
@@ -191,37 +196,15 @@ class ZuuuGotoActionServer(Node):
         feedback_msg.feedback.angle_error = angle_error
         goal_handle.publish_feedback(feedback_msg)
 
-    
-    def goto_tick(self):
-        """Tick function for the goto mode. Will calculate the robot's speed to reach a goal pose in the odometry frame.
+    def check_goto_arrived(self):
+        """Checks if the robot has reached the goal pose and provides the current distance and angle errors.
         """
         dx = -self.zuuu_hal.x_goal + self.zuuu_hal.x_odom
         dy = -self.zuuu_hal.y_goal + self.zuuu_hal.y_odom
         distance_error = math.sqrt(dx ** 2 + dy ** 2)
         angle_error = -angle_diff(self.zuuu_hal.theta_goal, self.zuuu_hal.theta_odom)
         arrived = False
-        if distance_error < self.dist_tol and abs(angle_error) < self.angle_tol:
-            self.zuuu_hal.x_vel_goal, self.zuuu_hal.y_vel_goal, self.zuuu_hal.theta_vel_goal =  0.0, 0.0, 0.0
+        if distance_error < self.zuuu_hal.dist_tol and abs(angle_error) < self.zuuu_hal.angle_tol:
             self.get_logger().info("Reached the goal position !")
             arrived = True
-        else:
-            dist_command = self.distance_pid.tick(distance_error)
-            angle_command = self.angle_pid.tick(angle_error, is_angle=True)
-            # The vector (dx, dy) is the vector from the robot to the goal in the odom frame
-            # Transforming that vector from the world-fixed odom frame to the robot-fixed frame
-            x_command = dx * math.cos(-self.zuuu_hal.theta_odom) - dy * math.sin(-self.zuuu_hal.theta_odom)
-            y_command = dx * math.sin(-self.zuuu_hal.theta_odom) + dy * math.cos(-self.zuuu_hal.theta_odom)
-            # Normalizing. The (x_command, y_command) vector is now a unit vector pointing towards the goal in the robot frame
-            x_command = x_command / distance_error 
-            y_command = y_command / distance_error
-            # Scaling the command vector by the PID output
-            x_command *= dist_command
-            y_command *= dist_command
-            
-            # No transformations to do with the angle_command as the Z odom axis is coolinear with the Z robot axis
-            self.zuuu_hal.x_vel_goal = x_command
-            self.zuuu_hal.y_vel_goal = y_command
-            self.zuuu_hal.theta_vel_goal = angle_command
-            
         return arrived, distance_error, angle_error
-

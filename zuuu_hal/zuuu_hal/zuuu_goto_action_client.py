@@ -144,6 +144,70 @@ async def blocking_demo(action_client):
         1.0,
         feedback_callback=action_client.feedback_callback_default
     )
+    
+    # Sleeping in place can lead to a better precision than the tolerances set
+    await asyncio.sleep(1.0)
+    
+    
+    result, status = await action_client.send_goal(
+        0.0,
+        0.0,
+        np.deg2rad(45),
+        0.05,
+        np.deg2rad(5),
+        10.0,
+        True,
+        5.0,
+        0.0,
+        0.0,
+        0.4,
+        5.0,
+        0.0,
+        0.0,
+        1.0,
+        feedback_callback=action_client.feedback_callback_default
+    )
+    
+    await asyncio.sleep(1.0)
+    
+    result, status = await action_client.send_goal(
+        1.0,
+        1.0,
+        np.deg2rad(45),
+        0.05,
+        np.deg2rad(5),
+        10.0,
+        True,
+        5.0,
+        0.0,
+        0.0,
+        0.4,
+        5.0,
+        0.0,
+        0.0,
+        1.0,
+        feedback_callback=action_client.feedback_callback_default
+    )
+    
+    result, status = await action_client.send_goal(
+        0.0,
+        0.0,
+        np.deg2rad(0.0),
+        0.05,
+        np.deg2rad(5),
+        10.0,
+        True,
+        5.0,
+        0.0,
+        0.0,
+        0.4,
+        5.0,
+        0.0,
+        0.0,
+        1.0,
+        feedback_callback=action_client.feedback_callback_default
+    )
+    
 
 
 
@@ -313,10 +377,11 @@ async def run_demo(args, loop):
 
 def main(args=None):
     loop = asyncio.get_event_loop()
-    done, _pending = loop.run_until_complete(run_demo(args, loop=loop))
+    loop.run_until_complete(run_demo(args, loop=loop))
+    # done, _pending = loop.run_until_complete(run_demo(args, loop=loop))
 
-    for task in done:
-        task.result()  # raises exceptions if any
+    # for task in done:
+    #     task.result() 
 
 
 if __name__ == "__main__":
