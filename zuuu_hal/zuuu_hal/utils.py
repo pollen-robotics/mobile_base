@@ -34,13 +34,16 @@ class PID:
         self.i = i
         self.d = d
         self.max_command = max_command
-        self.max_i_contribution = max_i_contribution
-        self.goal_value = 0
-        self.current_value = 0
+        if max_i_contribution is None:
+            self.max_i_contribution = max_command/2.0
+        else:
+            self.max_i_contribution = max_i_contribution
+        self.goal_value = 0.0
+        self.current_value = 0.0
 
-        self.prev_error = 0
-        self.i_contribution = 0
-        self.integral = 0
+        self.prev_error = 0.0
+        self.i_contribution = 0.0
+        self.integral = 0.0
         self.prev_t = time.time()
 
     def set_goal(self, goal_value: float) -> None:
@@ -51,8 +54,8 @@ class PID:
 
     def reset(self) -> None:
         """Resets the integral portion, dt and the differential contribution"""
-        self.i_contribution = 0
-        self.integral = 0
+        self.i_contribution = 0.0
+        self.integral = 0.0
         self.prev_t = time.time()
         self.prev_error = self.goal_value - self.current_value
 

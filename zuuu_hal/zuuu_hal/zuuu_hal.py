@@ -357,10 +357,20 @@ class ZuuuHAL(Node):
             fake_hardware=self.fake_hardware,
         )
         self.cv_bridge = CvBridge()
+        
+        """
+        PID values tunned on a Reachy 2 15/10/2024
+        The idea behind this tuning is that the proportional gain (P) is set quite high, 
+        as it's needed to overcome friction at low speeds. 
+        However, the maximum command is kept reasonable to limit the cruise speed.
 
-        self.x_pid = PID(p=3.0, i=0.00, d=0.0, max_command=0.5, max_i_contribution=0.0)
-        self.y_pid = PID(p=3.0, i=0.00, d=0.0, max_command=0.5, max_i_contribution=0.0)
-        self.theta_pid = PID(p=1.0, i=0.0, d=0.00, max_command=4.0, max_i_contribution=1.0)
+        We also tested a full PID tuning (instead of just P), but the promise of "eliminating the steady-state error" 
+        doesn’t work well with the small "steps" produced by the holonomic wheel.
+        """
+        self.x_pid = PID(p=5.0, i=0.00, d=0.0, max_command=0.4, max_i_contribution=None)
+        self.y_pid = PID(p=5.0, i=0.00, d=0.0, max_command=0.4, max_i_contribution=None)
+        self.theta_pid = PID(p=5.0, i=0.0, d=0.00, max_command=1.0, max_i_contribution=None)
+        
         # "No over-shoot Ziegler Nichols"
         # self.theta_pid = PID(p=3.2, i=14.2, d=0.475,
         #                      max_command=4.0, max_i_contribution=1.0)
@@ -1515,27 +1525,33 @@ class ZuuuHAL(Node):
             elif self.mode is ZuuuModes.SPEED:
                 self.speed_mode_tick()
             elif self.mode is ZuuuModes.GOTO:
-                self.goto_tick()
+                # This mode is handled by the Goto Action Server
+                return
             elif self.mode is ZuuuModes.CMD_GOTO:
                 self.cmd_goto_tick()
-
             # Here, the following values have been calculated: self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal
-            # We'll apply filtering, safety checks and then we'll call the IK to get the wheel speeds and send them to the controller.
-            x_vel, y_vel, theta_vel = self.filter_speed_goals(self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal)
-            x_vel, y_vel, theta_vel = self.lidar_safety.safety_check_speed_command(x_vel, y_vel, theta_vel)
-            x_vel, y_vel, theta_vel = self.limit_vel_commands(x_vel, y_vel, theta_vel)
-
-            # IK calculations. From Robot's speed to wheels' speeds
-            self.calculated_wheel_speeds = self.ik_vel(x_vel, y_vel, theta_vel)
-            if self.fake_hardware:
-                # In fake or Gazebo mode, the robot's speed is published directly and the mouvement is simulated
-                self.publish_fake_robot_speed(x_vel, y_vel, theta_vel)
-            else:
-                # Sending the commands to the physical wheels
-                self.send_wheel_commands(self.calculated_wheel_speeds)           
+            self.process_velocity_goals_and_send_wheel_commands()
         else:
             # Stop modes directly send stopping commands to the wheels
             self.handle_stop_modes(self.mode)
+            
+    def process_velocity_goals_and_send_wheel_commands(self):
+        """Processes the robot speed goals and sends the calculated wheel speeds to the wheel controllers.
+        The robot speed goals are filtered, safety checked and then transformed into wheel speeds using the IK.
+        This function is publisdes differently depending on the mode of the robot (fake or real hardware).
+        """
+        x_vel, y_vel, theta_vel = self.filter_speed_goals(self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal)
+        x_vel, y_vel, theta_vel = self.lidar_safety.safety_check_speed_command(x_vel, y_vel, theta_vel)
+        x_vel, y_vel, theta_vel = self.limit_vel_commands(x_vel, y_vel, theta_vel)
+
+        # IK calculations. From Robot's speed to wheels' speeds
+        self.calculated_wheel_speeds = self.ik_vel(x_vel, y_vel, theta_vel)
+        if self.fake_hardware:
+            # In fake or Gazebo mode, the robot's speed is published directly and the mouvement is simulated
+            self.publish_fake_robot_speed(x_vel, y_vel, theta_vel)
+        else:
+            # Sending the commands to the physical wheels
+            self.send_wheel_commands(self.calculated_wheel_speeds)  
             
                 
     def measurements_tick(self, verbose: bool = False):

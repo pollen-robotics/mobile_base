@@ -12,6 +12,17 @@ float64 angle_tol
 # Timeout (s)
 float64 timeout
 
-# PIDs
+# When the goal is reached, should the robot keep trying to reach it or stop all commands?
+bool keep_control_on_arrival true
 
-# Behavior when arrived (ON/off control)
+# PID tunning for the distance controller
+float64 distance_p 5.0
+float64 distance_i 0.0
+float64 distance_d 0.0
+float64 distance_max_command 0.4
+
+# PID tunning for the angle controller
+float64 angle_p 5.0
+float64 angle_i 0.0
+float64 angle_d 0.0
+float64 angle_max_command 1.0
