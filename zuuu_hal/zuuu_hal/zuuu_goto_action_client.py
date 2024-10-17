@@ -102,6 +102,24 @@ async def blocking_demo(action_client):
     logger.info(f"$$$$$$ EXAMPLE 1: blocking calls")
     # Setting the feedback callback only once because it's very verbose
     result, status = await action_client.send_goal(
+        0.0,
+        0.0,
+        np.deg2rad(720.0),
+        0.05,
+        np.deg2rad(5),
+        10.0,
+        True,
+        5.0,
+        0.0,
+        0.0,
+        0.4,
+        5.0,
+        0.0,
+        0.0,
+        1.0,
+        feedback_callback=action_client.feedback_callback_default
+    )
+    result, status = await action_client.send_goal(
         1.0,
         0.0,
         0.0,
@@ -448,10 +466,10 @@ async def run_demo(args, loop):
     spin_task = loop.create_task(spinning(action_client))
 
     # # Demo 1: blocking calls
-    # await blocking_demo(action_client)
+    await blocking_demo(action_client)
 
     # # Demo 2: non-blocking calls called simultaneously
-    await non_blocking_demo(action_client, loop)
+    # await non_blocking_demo(action_client, loop)
 
     # # Demo 3: cancel
     # await cancel_demo(action_client, loop)

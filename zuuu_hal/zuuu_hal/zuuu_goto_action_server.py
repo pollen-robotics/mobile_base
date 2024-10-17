@@ -102,15 +102,14 @@ class ZuuuGotoActionServer(Node):
             self.get_logger().warning(f"A mode change happened during the goto execution. Removing all ({self._goal_queue.qsize()}) goals from the queue.")
             while not self._goal_queue.empty():
                 server_goal_handle = self._goal_queue.get()
-                server_goal_handle.canceled()
                 server_goal_handle.destroy()
         if ret == "canceled":
             q_size = self._goal_queue.qsize()
             if q_size == 0:
                 self.get_logger().info(f"Goal canceled and no other goals in the queue => Brake mode")
                 self.zuuu_hal.mode = ZuuuModes.BRAKE     
-        elif not self.keep_control_on_arrival:
-            # Chaging the mode to BRAKE when the goal is reached
+        elif (not self.keep_control_on_arrival) and (self._goal_queue.qsize() == 0):
+            # Changing the mode to BRAKE when the goal is reached and there are no other goals in the queue
             self.zuuu_hal.mode = ZuuuModes.BRAKE
 
         # Populate result message
@@ -139,11 +138,8 @@ class ZuuuGotoActionServer(Node):
         # Setting zuuu_hal mode to GOTO
         if self.zuuu_hal.mode is not ZuuuModes.GOTO:
             # TODO do this only if the queue is not empty
-            self.get_logger().info(f"Switching from {self.zuuu_hal.mode} mode to GOTO. Removing all ({self._goal_queue}) goals from the queue for safety.")
-            while not self._goal_queue.empty():
-                server_goal_handle = self._goal_queue.get()
-                server_goal_handle.canceled()
-                server_goal_handle.destroy()
+            self.get_logger().info(f"Switching from {self.zuuu_hal.mode} mode to {ZuuuModes.GOTO}.")
+            self.zuuu_hal.mode = ZuuuModes.GOTO
     
     def goto_time(self, goal_handle, goto_request):
         """Blocking function that sends commands to the mobile base to reach a goal pose in the odometry frame.
@@ -209,7 +205,8 @@ class ZuuuGotoActionServer(Node):
         dx = -self.zuuu_hal.x_goal + self.zuuu_hal.x_odom
         dy = -self.zuuu_hal.y_goal + self.zuuu_hal.y_odom
         distance_error = math.sqrt(dx ** 2 + dy ** 2)
-        angle_error = -angle_diff(self.zuuu_hal.theta_goal, self.zuuu_hal.theta_odom)
+
+        angle_error = -self.zuuu_hal.theta_goal + self.zuuu_hal.theta_odom
         arrived = False
         if distance_error < self.zuuu_hal.dist_tol and abs(angle_error) < self.zuuu_hal.angle_tol:
             self.get_logger().info("Reached the goal position !")

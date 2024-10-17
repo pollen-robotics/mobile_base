@@ -1440,11 +1440,15 @@ class ZuuuHAL(Node):
         dx = -self.x_goal + self.x_odom
         dy = -self.y_goal + self.y_odom
         distance_error = math.sqrt(dx ** 2 + dy ** 2)
-        angle_error = -angle_diff(self.theta_goal, self.theta_odom)
+        angle_error = -self.theta_goal + self.theta_odom
         arrived = False
 
         dist_command = self.distance_pid.tick(distance_error)
-        angle_command = self.angle_pid.tick(angle_error, is_angle=True)
+        # This version gives full control to the user
+        angle_command = self.angle_pid.tick(angle_error)
+        # With this version the robot will rotate towards the goal with the shortest path
+        # angle_command = self.angle_pid.tick(angle_error, is_angle=True)
+        
         # The vector (dx, dy) is the vector from the robot to the goal in the odom frame
         # Transforming that vector from the world-fixed odom frame to the robot-fixed frame
         x_command = dx * math.cos(-self.theta_odom) - dy * math.sin(-self.theta_odom)
