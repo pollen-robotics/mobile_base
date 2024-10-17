@@ -359,49 +359,83 @@ async def non_blocking_demo(action_client, loop):
 
 
 
-# async def square_demo(action_client, loop):
-#     logger = rclpy.logging.get_logger("mobile_base_goto_action_client")
-#     logger.info(f"$$$$$$ EXAMPLE 4: complete IK calls")
+async def square_demo(action_client, max_speed, max_rotation_speed):
+    logger = rclpy.logging.get_logger("mobile_base_goto_action_client")
 
-#     r_square = [
-#         [7.53, -22.16, -30.57, -69.92, 14.82, 20.59, 18.28],
-#         [-6.43, -34.65, -46.71, -109.05, 42.49, -28.29, 45.83],
-#         [-22.53, 5.92, 2.71, -123.43, -31.76, -50.2, -30.13],
-#         [2.66, 6.08, -1.9, -83.19, -12.97, 10.76, -3.67],
-#         [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-#     ]
-
-#     joint_names = [
-#         "r_shoulder_pitch",
-#         "r_shoulder_roll",
-#         "r_elbow_yaw",
-#         "r_elbow_pitch",
-#         "r_wrist_roll",
-#         "r_wrist_pitch",
-#         "r_wrist_yaw",
-#     ]
-
-#     for p in r_square:
-#         # Setting values of p to radians
-#         p = [np.deg2rad(i) for i in p]
-#         result, status = await action_client.send_goal("r_arm", joint_names, p, 0.5)
-#         logger.info(f"Result: {result.result.status}")
-#         # await asyncio.sleep(0.2)
-
-#     # # Cancel version
-#     # for p in r_square:
-#     #     # Setting values of p to radians
-#     #     p = [np.deg2rad(i) for i in p]
-#     #     goal_handle = await action_client.send_goal(
-#     #         "r_arm",
-#     #         joint_names,
-#     #         p,
-#     #         0.5,
-#     #         return_handle=True,
-#     #         feedback_callback=action_client.feedback_callback_default,
-#     #     )
-#     #     await asyncio.sleep(0.4)
-#     #     await goal_handle.cancel_goal_async()
+    logger.info(f"$$$$$$ EXAMPLE 4: square demo max_speed: {max_speed}, max_rotation_speed: {max_rotation_speed}")
+    result, status = await action_client.send_goal(
+        1.0,
+        0.0,
+        np.deg2rad(0.0),
+        0.05,
+        np.deg2rad(5),
+        10.0,
+        True,
+        5.0,
+        0.0,
+        0.0,
+        max_speed,
+        5.0,
+        0.0,
+        0.0,
+        max_rotation_speed,
+        feedback_callback=action_client.feedback_callback_default
+    )
+    result, status = await action_client.send_goal(
+        1.0,
+        1.0,
+        np.deg2rad(0.0),
+        0.05,
+        np.deg2rad(5),
+        10.0,
+        True,
+        5.0,
+        0.0,
+        0.0,
+        max_speed,
+        5.0,
+        0.0,
+        0.0,
+        max_rotation_speed,
+        feedback_callback=action_client.feedback_callback_default
+    )
+    result, status = await action_client.send_goal(
+        0.0,
+        1.0,
+        np.deg2rad(0.0),
+        0.05,
+        np.deg2rad(5),
+        10.0,
+        True,
+        5.0,
+        0.0,
+        0.0,
+        max_speed,
+        5.0,
+        0.0,
+        0.0,
+        max_rotation_speed,
+        feedback_callback=action_client.feedback_callback_default
+    )
+    result, status = await action_client.send_goal(
+        0.0,
+        0.0,
+        np.deg2rad(0.0),
+        0.05,
+        np.deg2rad(5),
+        10.0,
+        True,
+        5.0,
+        0.0,
+        0.0,
+        max_speed,
+        5.0,
+        0.0,
+        0.0,
+        max_rotation_speed,
+        feedback_callback=action_client.feedback_callback_default
+    )
+    
 
 
 async def cancel_demo(action_client, loop):
@@ -466,7 +500,7 @@ async def run_demo(args, loop):
     spin_task = loop.create_task(spinning(action_client))
 
     # # Demo 1: blocking calls
-    await blocking_demo(action_client)
+    # await blocking_demo(action_client)
 
     # # Demo 2: non-blocking calls called simultaneously
     # await non_blocking_demo(action_client, loop)
@@ -474,14 +508,12 @@ async def run_demo(args, loop):
     # # Demo 3: cancel
     # await cancel_demo(action_client, loop)
 
-    # # Demo 4: square
-    # # while True:
-    # await square_demo(action_client, loop)
+    # # Demo 4: square with different speeds
+    while True:
+        await square_demo(action_client, 0.4, 1.0)
+        await square_demo(action_client, 0.2, 0.5)
+        await square_demo(action_client, 0.8, 2.0)
 
-
-
-    # # Demo 6: continuous speed
-    # await continuous_speed_demo(action_client, loop)
 
     # cancel spinning task
     spin_task.cancel()
