@@ -500,19 +500,18 @@ async def run_demo(args, loop):
     spin_task = loop.create_task(spinning(action_client))
 
     # # Demo 1: blocking calls
-    # await blocking_demo(action_client)
+    await blocking_demo(action_client)
 
     # # Demo 2: non-blocking calls called simultaneously
-    # await non_blocking_demo(action_client, loop)
+    await non_blocking_demo(action_client, loop)
 
     # # Demo 3: cancel
-    # await cancel_demo(action_client, loop)
+    await cancel_demo(action_client, loop)
 
     # # Demo 4: square with different speeds
-    while True:
-        await square_demo(action_client, 0.4, 1.0)
-        await square_demo(action_client, 0.2, 0.5)
-        await square_demo(action_client, 0.8, 2.0)
+    await square_demo(action_client, 0.4, 1.0)
+    await square_demo(action_client, 0.2, 0.5)
+    await square_demo(action_client, 0.8, 2.0)
 
 
     # cancel spinning task
