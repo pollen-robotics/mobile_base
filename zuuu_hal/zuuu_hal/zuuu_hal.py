@@ -631,10 +631,14 @@ class ZuuuHAL(Node):
         """Publishes the safety status in the `mobile_base_safety_status` topic"""
         msg = MobileBaseState()
         string_status = self.lidar_safety.obstacle_detection_status
+        t = time.time()
+        if (not self.scan_is_read) or ((t - self.scan_t0) > self.scan_timeout):
+            # Too much time without a LIDAR scan
+            string_status = "error"
 
         # string to float conversion using the mobile_base_lidar.proto file
         # [0: detection error, 1: no obstacle, 2: obstacle detected slowing down, 3: obstacle detected stopping]
-        status = 0  # no object detected (DETECTION_ERROR)
+        status = 0.0  # no object detected (DETECTION_ERROR)
         if string_status == "green":
             status = 1.0  # no object detected (NO_OBJECT_DETECTED)
         elif string_status == "orange":
