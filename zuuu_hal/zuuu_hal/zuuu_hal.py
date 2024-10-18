@@ -321,14 +321,16 @@ class ZuuuHAL(Node):
 
         We also tested a full PID tuning (instead of just P), but the promise of "eliminating the steady-state error" 
         doesn’t work well with the small "steps" produced by the holonomic wheel.
-        """
-        self.x_pid = PID(p=5.0, i=0.00, d=0.0, max_command=0.4, max_i_contribution=None)
-        self.y_pid = PID(p=5.0, i=0.00, d=0.0, max_command=0.4, max_i_contribution=None)
-        self.theta_pid = PID(p=5.0, i=0.0, d=0.00, max_command=1.0, max_i_contribution=None)
-        
+        """        
         # "No over-shoot Ziegler Nichols"
         # self.theta_pid = PID(p=3.2, i=14.2, d=0.475,
         #                      max_command=4.0, max_i_contribution=1.0)
+        
+        self.distance_pid_cmd_goto = PID(p=5.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=None)
+        self.angle_pid_cmd_goto = PID(p=5.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=None)
+        # TODO test IRL if this is a good idea. Not using it for now
+        # self.slow_distance_pid_cmd_goto = PID(p=1.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=None)
+        # self.slow_angle_pid_cmd_goto = PID(p=1.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=None)
 
         self.max_wheel_speed = self.pwm_to_wheel_rot_speed(self.max_duty_cyle)
         self.get_logger().info(
@@ -1207,19 +1209,6 @@ class ZuuuHAL(Node):
         else:
             self.get_logger().warning("unknown control mode '{}'".format(self.control_mode))
 
-    def position_control(self) -> List[float]:
-        """Calculates the speed targets to be sent on x, y and theta to reach their respective goals during a GoTo
-        This function uses 3 separate PIDs controllers who's targets must be set before calling this function.
-        """
-        x_command_odom = self.x_pid.tick(self.x_odom)
-        y_command_odom = self.y_pid.tick(self.y_odom)
-        theta_command_odom = self.theta_pid.tick(self.theta_odom, is_angle=True)
-
-        x_command = x_command_odom * math.cos(-self.theta_odom) - y_command_odom * math.sin(-self.theta_odom)
-        y_command = x_command_odom * math.sin(-self.theta_odom) + y_command_odom * math.cos(-self.theta_odom)
-
-        return x_command, y_command, theta_command_odom
-
     def stop_ongoing_services(self) -> None:
         """Stops the GoTo and the SetSpeed services, if they were running"""
         self.goto_service_on = False
@@ -1329,14 +1318,13 @@ class ZuuuHAL(Node):
         dx = x_vel_goal
         dy = y_vel_goal
         dtheta = theta_vel_goal
-        # Limiting the span of dtheta (if dtheta is allowed beyond PI, the PID will inverse the sign of the rotation, creating a discontinuity in control)
-        max_dtheta = 5 * math.pi / 6
-        if dtheta > max_dtheta:
-            dtheta = max_dtheta
-        elif dtheta < -max_dtheta:
-            dtheta = -max_dtheta
+        # # V0 no smart correction, everything is open
+        # self.theta_goal = self.theta_odom+dtheta
+        # self.x_goal = self.x_odom+(dx * math.cos(self.theta_odom) - dy*math.sin(self.theta_odom))
+        # self.y_goal = self.y_odom+(dx * math.sin(self.theta_odom) + dy*math.cos(self.theta_odom))
+        # return
         almost_zero = 0.001
-        # OK il faut faire du goal_theta quand on rotate pas, et du current sinon.
+        # doing goal_theta when not rotating and current theta when rotating
         (
             joy_angle,
             intensity,
@@ -1381,9 +1369,8 @@ class ZuuuHAL(Node):
                 self.save_odom_checkpoint_xy()
             if not (rotation_on):
                 # Fully static. Reducing the P to remove the oscillations created by the "steps" of the wheels
-                self.theta_pid = PID(p=0.5, i=0.0, d=0.00, max_command=4.0, max_i_contribution=1.0)
-                self.x_pid = PID(p=1.0, i=0.00, d=0.0, max_command=0.5, max_i_contribution=0.0)
-                self.y_pid = PID(p=1.0, i=0.00, d=0.0, max_command=0.5, max_i_contribution=0.0)
+                # TODO removing this mecanism for now, test IRL and see if it's needed
+                pass
             self.x_goal = self.x_odom_checkpoint
             self.y_goal = self.y_odom_checkpoint
         else:
@@ -1400,20 +1387,6 @@ class ZuuuHAL(Node):
             self.x_goal, self.y_goal = self.calculate_xy_goal(intensity)
             # self.get_logger().info(
             #     f"self.x_goal={self.x_goal:.2f}, self.y_goal={self.y_goal:.2f}, self.theta_goal={self.theta_goal:.2f}")
-
-        # # V0 no smart correction, everything is open
-        # self.theta_goal = self.theta_odom+dtheta
-        # self.x_goal = self.x_odom+(dx * math.cos(self.theta_odom) - dy*math.sin(self.theta_odom))
-        # self.y_goal = self.y_odom+(dx * math.sin(self.theta_odom) + dy*math.cos(self.theta_odom))
-        if not (is_stationary) or not (rotation_on):
-            # Increasing the P since it's OK while moving
-            self.theta_pid = PID(p=1.0, i=0.0, d=0.00, max_command=4.0, max_i_contribution=1.0)
-            self.x_pid = PID(p=3.0, i=0.00, d=0.0, max_command=0.5, max_i_contribution=0.0)
-            self.y_pid = PID(p=3.0, i=0.00, d=0.0, max_command=0.5, max_i_contribution=0.0)
-
-        self.x_pid.set_goal(self.x_goal)
-        self.y_pid.set_goal(self.y_goal)
-        self.theta_pid.set_goal(self.theta_goal)
     
     def cmd_vel_tick(self):
         t = time.time()
@@ -1434,36 +1407,51 @@ class ZuuuHAL(Node):
             self.speed_service_on = False
             self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal =  0.0, 0.0, 0.0
     
-    def goto_tick(self):
+    def goto_tick(self, shortest_angle=False, distance_pid=None, angle_pid=None):
         """Tick function for the goto mode. Will calculate the robot's speed to reach a goal pose in the odometry frame.
+        This function uses a PID controlle for translation and a PID controller for rotation.
         """
         dx = -self.x_goal + self.x_odom
         dy = -self.y_goal + self.y_odom
         distance_error = math.sqrt(dx ** 2 + dy ** 2)
         angle_error = -self.theta_goal + self.theta_odom
-        arrived = False
+        if distance_pid is None:
+            distance_pid = self.distance_pid
+        else:
+            distance_pid = distance_pid
+            
+        if angle_pid is None:
+            angle_pid = self.angle_pid
+        else:
+            angle_pid = angle_pid
 
-        dist_command = self.distance_pid.tick(distance_error)
-        # This version gives full control to the user
-        angle_command = self.angle_pid.tick(angle_error)
-        # With this version the robot will rotate towards the goal with the shortest path
-        # angle_command = self.angle_pid.tick(angle_error, is_angle=True)
+        dist_command = distance_pid.tick(distance_error)
+        if not shortest_angle:
+            # This version gives full control to the user
+            angle_command = angle_pid.tick(angle_error)
+        else:
+            # With this version the robot will rotate towards the goal with the shortest path
+            angle_command = angle_pid.tick(angle_error, is_angle=True)
         
         # The vector (dx, dy) is the vector from the robot to the goal in the odom frame
         # Transforming that vector from the world-fixed odom frame to the robot-fixed frame
         x_command = dx * math.cos(-self.theta_odom) - dy * math.sin(-self.theta_odom)
         y_command = dx * math.sin(-self.theta_odom) + dy * math.cos(-self.theta_odom)
         # Normalizing. The (x_command, y_command) vector is now a unit vector pointing towards the goal in the robot frame
-        x_command = x_command / distance_error 
-        y_command = y_command / distance_error
-        # Scaling the command vector by the PID output
-        x_command *= dist_command
-        y_command *= dist_command
+        if distance_error == 0:
+            x_command = 0
+            y_command = 0
+        else:
+            x_command = x_command / distance_error 
+            y_command = y_command / distance_error
+            # Scaling the command vector by the PID output
+            x_command *= dist_command
+            y_command *= dist_command
         
         # No transformations to do with the angle_command as the Z odom axis is coolinear with the Z robot axis
         self.x_vel_goal = x_command
         self.y_vel_goal = y_command
-        self.theta_vel_goal = angle_command  
+        self.theta_vel_goal = angle_command 
     
     def cmd_goto_tick(self):
         t = time.time()
@@ -1474,7 +1462,7 @@ class ZuuuHAL(Node):
             self.y_vel_goal = self.cmd_vel.linear.y
             self.theta_vel_goal = self.cmd_vel.angular.z
             self.fake_vel_goals_to_goto_goals(self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal)
-            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = self.position_control()
+            self.goto_tick(shortest_angle=False, distance_pid=self.distance_pid_cmd_goto, angle_pid=self.angle_pid_cmd_goto)
         else:
             self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal =  0.0, 0.0, 0.0
         

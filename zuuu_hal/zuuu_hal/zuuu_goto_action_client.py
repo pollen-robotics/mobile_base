@@ -487,9 +487,6 @@ async def cancel_demo(action_client, loop):
         return_handle=False,
     )
 
-
-
-
 async def run_demo(args, loop):
     rclpy.init(args=args)
 
