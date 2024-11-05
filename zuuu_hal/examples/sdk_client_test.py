@@ -10,61 +10,41 @@ reachy.mobile_base.turn_on()
 print("resetting odometry...")
 reachy.mobile_base.reset_odometry()
 time.sleep(1.0)
-# reachy.mobile_base.goto(x=1.0, y=0.0, theta=0.0, timeout=10000, tolerance={"delta_x": 0.0, "delta_y": 0.0, "delta_theta": 0.0, "distance": 0.0})
-# exit()
-print("Drawing a square of 1x1m")
-# while True :
-#     reachy.mobile_base.goto(x=1.0, y=0.0, theta=0.0, timeout=10000, tolerance={"delta_x": 0.05, "delta_y": 0.05, "delta_theta": 5.0, "distance": 0.05})
-#     reachy.mobile_base.goto(x=1.0, y=1.0, theta=90.0, timeout=10000, tolerance={"delta_x": 0.05, "delta_y": 0.05, "delta_theta": 5.0, "distance": 0.05})
-#     reachy.mobile_base.goto(x=0.0, y=1.0, theta=180.0, timeout=10000, tolerance={"delta_x": 0.05, "delta_y": 0.05, "delta_theta": 5.0, "distance": 0.05})
-#     reachy.mobile_base.goto(x=0.0, y=0.0, theta=270.0, timeout=10000, tolerance={"delta_x": 0.05, "delta_y": 0.05, "delta_theta": 5.0, "distance": 0.05})
 
-# while True :
-#     reachy.mobile_base.goto(x=1.0, y=1.0, theta=90.0, timeout=10000, tolerance={"delta_x": 0.05, "delta_y": 0.05, "delta_theta": 5.0, "distance": 0.05})
-#     reachy.mobile_base.goto(x=0.0, y=0.0, theta=0.0, timeout=10000, tolerance={"delta_x": 0.05, "delta_y": 0.05, "delta_theta": 5.0, "distance": 0.05})
-    
+print("Drawing a square of 1x1m with wait=False")
+reachy.mobile_base.goto(x=1.0, y=0.0, theta=00.0, wait=False, degrees=True, distance_tolerance=0.05, angle_tolerance=5.0, timeout=10000)
+reachy.mobile_base.goto(x=1.0, y=1.0, theta=00.0, wait=False, degrees=True, distance_tolerance=0.05, angle_tolerance=5.0, timeout=10000)
+reachy.mobile_base.goto(x=0.0, y=1.0, theta=00.0, wait=False, degrees=True, distance_tolerance=0.05, angle_tolerance=5.0, timeout=10000)
+reachy.mobile_base.goto(x=0.0, y=0.0, theta=00.0, wait=False, degrees=True, distance_tolerance=0.05, angle_tolerance=5.0, timeout=10000)
+print("This message should appear before the end of the square. Waiting with time.sleep(5.0)")
 
-while True :
-    print("goto!")
-    reachy.mobile_base.goto(x=1.0, y=1.0, theta=90.0, timeout=10000, tolerance={"delta_x": 0.05, "delta_y": 0.05, "delta_theta": 5.0, "distance": 0.05})
-    print("resetting odometry...")
-    
-    reachy.mobile_base.reset_odometry()
-    time.sleep(0.1)
-    
-    print("anti goto!")
-    reachy.mobile_base.goto(x=-1.0, y=1.0, theta=-90.0, timeout=10000, tolerance={"delta_x": 0.05, "delta_y": 0.05, "delta_theta": 5.0, "distance": 0.05})
-    print("resetting odometry...")
-    reachy.mobile_base.reset_odometry()
-    time.sleep(0.1)
-    
+time.sleep(5.0)
+
+print("Testing the timeout, the robot should not reach x=10.0")
+reachy.mobile_base.goto(x=10.0, y=0.0, theta=00.0, wait=False, degrees=True, distance_tolerance=0.05, angle_tolerance=5.0, timeout=2)
+reachy.mobile_base.goto(x=0.0, y=0.0, theta=00.0, wait=False, degrees=True, distance_tolerance=0.05, angle_tolerance=5.0, timeout=10000)
+
+print("Note: the timeout had an effect because there was another goto scheduled, otherwise the mobile base would continue to go to x=10.0. TODO check if this is what we want")
+
+# TODO Remi x Team interface, wait=True fails
 
 
 
+# print("Rotating 90° back and forth")
+
+# reachy.mobile_base.goto(x=0.0, y=0.0, theta=90.0, wait=True, degrees=True, distance_tolerance=0.05, angle_tolerance=5.0, timeout=10000)
+# reachy.mobile_base.goto(x=0.0, y=0.0, theta=00.0, wait=True, degrees=True, distance_tolerance=0.05, angle_tolerance=5.0, timeout=10000)
+
+# print("Drawing a square of 1x1m with wait=True")
+
+# reachy.mobile_base.goto(x=1.0, y=0.0, theta=00.0, wait=True, degrees=True, distance_tolerance=0.05, angle_tolerance=5.0, timeout=10000)
+# reachy.mobile_base.goto(x=1.0, y=1.0, theta=00.0, wait=True, degrees=True, distance_tolerance=0.05, angle_tolerance=5.0, timeout=10000)
+# reachy.mobile_base.goto(x=0.0, y=1.0, theta=00.0, wait=True, degrees=True, distance_tolerance=0.05, angle_tolerance=5.0, timeout=10000)
+# reachy.mobile_base.goto(x=0.0, y=0.0, theta=00.0, wait=True, degrees=True, distance_tolerance=0.05, angle_tolerance=5.0, timeout=10000)
+# print("finished square")
 
 
-# input("reachy.mobile_base.goto(x=0.0, y=0.0, theta=-90.0)...")
-# reachy.mobile_base.goto(x=1.0, y=1.0, theta=-30.0, timeout=10000, tolerance={"delta_x": 0.05, "delta_y": 0.05, "delta_theta": 5.0, "distance": 0.05})
-# input("resetting odometry...")
-# reachy.mobile_base.reset_odometry()
-# input("reachy.mobile_base.goto(x=0.0, y=0.0, theta=-90.0)...")
-# reachy.mobile_base.goto(x=1.0, y=1.0, theta=-30.0, timeout=10000, tolerance={"delta_x": 0.05, "delta_y": 0.05, "delta_theta": 5.0, "distance": 0.05})
+# TODO test all the other parameters
 
 
-
-input("reachy.mobile_base.goto(x=0.0, y=0.0, theta=90.0)...")
-reachy.mobile_base.goto(x=0.0, y=0.0, theta=90.0, timeout=10000, tolerance={"delta_x": 0.01, "delta_y": 0.01, "delta_theta": 1.0, "distance": 0.01})
-
-input("Go back to 0 degrees")
-reachy.mobile_base.goto(x=0.0, y=0.0, theta=0.0, timeout=10000, tolerance={"delta_x": 0.01, "delta_y": 0.01, "delta_theta": 1.0, "distance": 0.01})
-input("reachy.mobile_base.goto(x=0.0, y=0.0, theta=-90.0)...")
-reachy.mobile_base.goto(x=0.0, y=0.0, theta=-90.0, timeout=10000, tolerance={"delta_x": 0.01, "delta_y": 0.01, "delta_theta": 1.0, "distance": 0.01})
-
-input("resetting odometry...")
-reachy.mobile_base.reset_odometry()
-input("Going back to 0 degrees in the frame : it won't move because the frame has changed")
-reachy.mobile_base.goto(x=0.0, y=0.0, theta=0.0, timeout=10000, tolerance={"delta_x": 0.01, "delta_y": 0.01, "delta_theta": 1.0, "distance": 0.01})
-
-
-input("reachy.mobile_base.goto(x=0.0, y=0.0, theta=-90.0)...")
-reachy.mobile_base.goto(x=0.0, y=0.0, theta=-90.0, timeout=10000, tolerance={"delta_x": 0.01, "delta_y": 0.01, "delta_theta": 1.0, "distance": 0.01})
+exit()

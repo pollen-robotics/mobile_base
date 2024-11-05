@@ -67,7 +67,8 @@ class ZuuuGotoActionClient(Node):
         request.angle_max_command = angle_max_command
         
 
-        self.get_logger().info("Sending goal request...")
+        self.get_logger().warning(f"Sending zuuu goto goal request: {request}")
+        
 
         goal_handle = await self.goto_action_client.send_goal_async(
             goal_msg, feedback_callback=feedback_callback

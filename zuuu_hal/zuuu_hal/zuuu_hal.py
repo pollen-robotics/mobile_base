@@ -1109,7 +1109,7 @@ class ZuuuHAL(Node):
                 self.get_logger().warning("Resetting the odometry while a GoTo is ON. Stopping the GoTo.")
                 self.goto_service_on = False
         self.publish_odometry_and_tf()
-        self.get_logger().info(f"XXX Odom: x={self.x_odom:.2f}m, y={self.y_odom:.2f}m, theta={self.theta_odom:.2f}rad")
+        # self.get_logger().info(f"XXX Odom: x={self.x_odom:.2f}m, y={self.y_odom:.2f}m, theta={self.theta_odom:.2f}rad")
 
     def reset_odom_now(self):
         if self.fake_hardware:
