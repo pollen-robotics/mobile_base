@@ -178,10 +178,14 @@ class ZuuuHAL(Node):
         """
         super().__init__("zuuu_hal")
         self.get_logger().info("Starting zuuu_hal!")
-        # self.zuuu_model = check_output(
-        #     os.path.expanduser('~')+'/.local/bin/reachy-identify-zuuu-model'
-        #     ).strip().decode()
 
+        self.declare_parameter('fake_hardware', False)
+        self.fake_hardware = self.get_parameter('fake_hardware').value
+        
+        if self.fake_hardware:
+            self.get_logger().error("Fake hardware mode is not implemented yet")
+            exit()
+        
         reachy_config = ReachyConfig()
         self.zuuu_version = reachy_config.mobile_base_config["version_hard"]
         self.get_logger().info(f"zuuu version: {self.zuuu_version}")
