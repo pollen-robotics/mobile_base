@@ -323,6 +323,7 @@ class JoyTeleop(Node):
         self.pub.publish(twist)
         
         self.emergency_reachy.turn_off_smoothly()
+        self.emergency_reachy.turn_off()
         
         while True:    
             self.pub.publish(twist)
