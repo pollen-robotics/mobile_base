@@ -6,7 +6,7 @@ from typing import List
 
 import cv2
 import numpy as np
-from reachy_utils.config import ReachyConfig
+from reachy_config import ReachyConfig
 from sensor_msgs.msg import LaserScan
 
 from zuuu_hal.utils import angle_diff
@@ -43,7 +43,7 @@ class LidarSafety:
         self.obstacle_detection_status = "green"
 
         reachy_config = ReachyConfig()
-        zuuu_version = reachy_config.mobile_base_config["version_hard"]
+        zuuu_version = reachy_config.config["reachy"]["config"]["mobile_base"]["version_hard"]
 
         # Not using the TF transforms because this is faster
         # TODO use a static TF2 transform instead
