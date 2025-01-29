@@ -1033,6 +1033,7 @@ class ZuuuHAL(Node):
         twist.linear.x = float(x_vel)
         twist.linear.y = float(y_vel)
         twist.angular.z = float(theta_vel)
+        # self.get_logger().info(f"Publishing fake robot speed: x={x_vel:.2f}m/s, y={y_vel:.2f}m/s, theta={theta_vel:.2f}rad/s")
         
         self.pub_fake_vel.publish(twist)
 
@@ -1077,25 +1078,25 @@ class ZuuuHAL(Node):
             self.vy = self.vy_gazebo
             self.vtheta = self.vtheta_gazebo
             
-            # # This is the small displacement in the world-fixed Gazebo odom frame (that never resets)
-            # dx_gazebo = self.x_odom_gazebo - self.x_odom_gazebo_old
-            # dy_gazebo = self.y_odom_gazebo - self.y_odom_gazebo_old
-            # # Since our odom frame can reset, we must apply a 2D rotation to the displacement to get it in our odom frame
-            # dx = dx_gazebo * math.cos(self.theta_zuuu_vs_gazebo) - dy_gazebo * math.sin(self.theta_zuuu_vs_gazebo)
-            # dy = dx_gazebo * math.sin(self.theta_zuuu_vs_gazebo) + dy_gazebo * math.cos(self.theta_zuuu_vs_gazebo)
-            # dtheta = angle_diff(self.theta_odom_gazebo, self.theta_odom_gazebo_old)
+            # This is the small displacement in the world-fixed Gazebo odom frame (that never resets)
+            dx_gazebo = self.x_odom_gazebo - self.x_odom_gazebo_old
+            dy_gazebo = self.y_odom_gazebo - self.y_odom_gazebo_old
+            # Since our odom frame can reset, we must apply a 2D rotation to the displacement to get it in our odom frame
+            dx = dx_gazebo * math.cos(self.theta_zuuu_vs_gazebo) - dy_gazebo * math.sin(self.theta_zuuu_vs_gazebo)
+            dy = dx_gazebo * math.sin(self.theta_zuuu_vs_gazebo) + dy_gazebo * math.cos(self.theta_zuuu_vs_gazebo)
+            dtheta = angle_diff(self.theta_odom_gazebo, self.theta_odom_gazebo_old)
             
-            # self.x_odom += dx
-            # self.y_odom += dy
-            # self.theta_odom += dtheta
+            self.x_odom += dx
+            self.y_odom += dy
+            self.theta_odom += dtheta
             
-            self.x_odom = self.x_odom_gazebo
-            self.y_odom = self.y_odom_gazebo
-            self.theta_odom = self.theta_odom_gazebo
+            # self.x_odom = self.x_odom_gazebo
+            # self.y_odom = self.y_odom_gazebo
+            # self.theta_odom = self.theta_odom_gazebo
             
-            # self.x_odom_gazebo_old = self.x_odom_gazebo
-            # self.y_odom_gazebo_old = self.y_odom_gazebo
-            # self.theta_odom_gazebo_old = self.theta_odom_gazebo
+            self.x_odom_gazebo_old = self.x_odom_gazebo
+            self.y_odom_gazebo_old = self.y_odom_gazebo
+            self.theta_odom_gazebo_old = self.theta_odom_gazebo
         
             
         if self.reset_odom:
