@@ -278,9 +278,6 @@ class ZuuuHAL(Node):
         self.vx_gazebo = 0.0
         self.vy_gazebo = 0.0
         self.vtheta_gazebo = 0.0
-        self.x_vel = 0.0
-        self.y_vel = 0.0
-        self.theta_vel = 0.0
         self.x_vel_goal = 0.0
         self.y_vel_goal = 0.0
         self.theta_vel_goal = 0.0
@@ -1011,10 +1008,6 @@ class ZuuuHAL(Node):
 
         # Tune these numbers if needed
         odom.pose.covariance = np.diag([1e-2, 1e-2, 1e-2, 1e3, 1e3, 1e-1]).ravel()
-        odom.twist.twist.linear.x = self.x_vel
-        odom.twist.twist.linear.y = self.y_vel
-        odom.twist.twist.angular.z = self.theta_vel
-
         odom.twist.covariance = np.diag([1e-2, 1e3, 1e3, 1e3, 1e3, 1e-2]).ravel()
         self.pub_odom.publish(odom)
 
@@ -1058,46 +1051,53 @@ class ZuuuHAL(Node):
             # We currently have no control on how the speeds are calculated.
             # -> By reading the encoder ticks directly and making the calculations here we could maybe make this a tad better?
 
-            # Local speeds in egocentric frame.
+            # Local speeds in egocentric frame deduced from the wheel speeds
             # "rpm" are actually erpm and need to be divided by half the amount of magnetic poles to get the actual rpm.
             pole_factor = self.omnibase.half_poles
-            self.x_vel, self.y_vel, self.theta_vel = self.dk_vel(
+            x_vel, y_vel, theta_vel = self.dk_vel(
                 self.omnibase.left_wheel_rpm * pole_factor,
                 self.omnibase.right_wheel_rpm * pole_factor,
                 self.omnibase.back_wheel_rpm * pole_factor,
             )
              # Applying the small displacement in the world-fixed odom frame (simple 2D rotation)
-            dx = (self.x_vel * math.cos(self.theta_odom) - self.y_vel * math.sin(self.theta_odom)) * dt_seconds
-            dy = (self.x_vel * math.sin(self.theta_odom) + self.y_vel * math.cos(self.theta_odom)) * dt_seconds
-            dtheta = self.theta_vel * dt_seconds
+            dx = (x_vel * math.cos(self.theta_odom) - y_vel * math.sin(self.theta_odom)) * dt_seconds
+            dy = (x_vel * math.sin(self.theta_odom) + y_vel * math.cos(self.theta_odom)) * dt_seconds
+            dtheta = theta_vel * dt_seconds
             self.x_odom += dx
             self.y_odom += dy
             self.theta_odom += dtheta
+            # These speeds are expected in the ego-centric frame
+            self.vx = x_vel
+            self.vy = y_vel
+            self.vtheta = theta_vel
         else:
             # Note: Using self.vx_gazebo and calculating the odometry from it as in the real case is a way of creating a noisy odometry
-            # That can be useful in certain situations. The version below uses the gazebo odometry directly which is much more precise.
-            self.x_vel = self.vx_gazebo
-            self.y_vel = self.vy_gazebo
-            self.theta_vel = self.vtheta_gazebo
-            # This is the small displacement in the world-fixed Gazebo odom frame (that never resets)
-            dx_gazebo = self.x_odom_gazebo - self.x_odom_gazebo_old
-            dy_gazebo = self.y_odom_gazebo - self.y_odom_gazebo_old
-            # Since our odom frame can reset, we must apply a 2D rotation to the displacement to get it in our odom frame
-            dx = dx_gazebo * math.cos(self.theta_zuuu_vs_gazebo) - dy_gazebo * math.sin(self.theta_zuuu_vs_gazebo)
-            dy = dx_gazebo * math.sin(self.theta_zuuu_vs_gazebo) + dy_gazebo * math.cos(self.theta_zuuu_vs_gazebo)
-            dtheta = angle_diff(self.theta_odom_gazebo, self.theta_odom_gazebo_old)
+            # which is useful in certain situations. The version below uses the gazebo odometry directly which is much more precise.
+            self.vx = self.vx_gazebo
+            self.vy = self.vy_gazebo
+            self.vtheta = self.vtheta_gazebo
             
-            self.x_odom += dx
-            self.y_odom += dy
-            self.theta_odom += dtheta
+            # # This is the small displacement in the world-fixed Gazebo odom frame (that never resets)
+            # dx_gazebo = self.x_odom_gazebo - self.x_odom_gazebo_old
+            # dy_gazebo = self.y_odom_gazebo - self.y_odom_gazebo_old
+            # # Since our odom frame can reset, we must apply a 2D rotation to the displacement to get it in our odom frame
+            # dx = dx_gazebo * math.cos(self.theta_zuuu_vs_gazebo) - dy_gazebo * math.sin(self.theta_zuuu_vs_gazebo)
+            # dy = dx_gazebo * math.sin(self.theta_zuuu_vs_gazebo) + dy_gazebo * math.cos(self.theta_zuuu_vs_gazebo)
+            # dtheta = angle_diff(self.theta_odom_gazebo, self.theta_odom_gazebo_old)
             
-            self.x_odom_gazebo_old = self.x_odom_gazebo
-            self.y_odom_gazebo_old = self.y_odom_gazebo
-            self.theta_odom_gazebo_old = self.theta_odom_gazebo
+            # self.x_odom += dx
+            # self.y_odom += dy
+            # self.theta_odom += dtheta
+            
+            self.x_odom = self.x_odom_gazebo
+            self.y_odom = self.y_odom_gazebo
+            self.theta_odom = self.theta_odom_gazebo
+            
+            # self.x_odom_gazebo_old = self.x_odom_gazebo
+            # self.y_odom_gazebo_old = self.y_odom_gazebo
+            # self.theta_odom_gazebo_old = self.theta_odom_gazebo
         
-        self.vx = dx / dt_seconds
-        self.vy = dy / dt_seconds
-        self.vtheta = dtheta / dt_seconds    
+            
         if self.reset_odom:
             # Resetting asynchronously to prevent race conditions.
             # dx, dy and dteta remain correct even on the reset tick
@@ -1606,21 +1606,12 @@ def main(args=None) -> None:
         while rclpy.ok():
             rate.sleep()
     except KeyboardInterrupt:
-        pass
-    rclpy.shutdown()
-    executor_thread.join()
+        rclpy.logging._root_logger.error(traceback.format_exc())
+    finally:
+        zuuu_hal.emergency_shutdown()
+        rclpy.shutdown()
+        executor_thread.join()
     
-    
-    # try:
-
-        
-    #     rclpy.spin(node)
-    # # except Exception:
-    # #     rclpy.logging._root_logger.error(traceback.format_exc())
-    # finally:
-    #     node.emergency_shutdown()
-    #     node.destroy_node()
-    #     rclpy.shutdown()
 
 
 if __name__ == "__main__":
