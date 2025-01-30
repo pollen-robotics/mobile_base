@@ -90,7 +90,7 @@ class JoyTeleop(Node):
         # The joyticks dont come back at a perfect 0 position when released.
         # Any abs(value) below min_joy_position will be assumed to be 0
         self.min_joy_position = 0.03
-        self.pub = self.create_publisher(geometry_msgs.msg.Twist, "cmd_vel_zuuu", 10)
+        self.pub = self.create_publisher(geometry_msgs.msg.Twist, "cmd_vel", 10)
         self.create_timer(0.01, self.main_tick)
         self.get_logger().info(msg)
 

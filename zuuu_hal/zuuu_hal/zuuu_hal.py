@@ -337,7 +337,7 @@ class ZuuuHAL(Node):
 
         self.cmd_vel_sub = self.create_subscription(
             Twist,
-            "cmd_vel_zuuu",
+            "cmd_vel",
             self.cmd_vel_callback,
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT),
         )
@@ -368,7 +368,7 @@ class ZuuuHAL(Node):
 
         self.pub_odom = self.create_publisher(Odometry, "odom_zuuu", 2)
         
-        self.pub_fake_vel = self.create_publisher(Twist, "cmd_vel", 10)                
+        self.pub_fake_vel = self.create_publisher(Twist, "cmd_vel_gazebo", 10)        
 
         self.mode_service = self.create_service(SetZuuuMode, "SetZuuuMode", self.handle_zuuu_mode)
 
