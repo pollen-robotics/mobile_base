@@ -5,11 +5,21 @@
     <ros2_control name="zuuu_ros2_control" type="system">
     <hardware>
         <xacro:if value="$(arg use_fake_components)">
-        <plugin>fake_components/GenericSystem</plugin>
+          <xacro:if value="$(arg use_gazebo)">
+            <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+          </xacro:if>
+          <xacro:unless value="$(arg use_gazebo)">
+            <plugin>fake_components/GenericSystem</plugin>
+          </xacro:unless>
         </xacro:if>
-        <xacro:unless value="$(arg use_fake_components)">
-        <plugin>gazebo_ros2_control/GazeboSystem</plugin>
-        </xacro:unless>
+
+
+        <!-- <xacro:if value="$(arg use_fake_components)"> -->
+        <!-- <plugin>fake_components/GenericSystem</plugin> -->
+        <!-- </xacro:if> -->
+        <!-- <xacro:unless value="$(arg use_fake_components)"> -->
+        <!-- <plugin>gazebo_ros2_control/GazeboSystem</plugin> -->
+        <!-- </xacro:unless> -->
 
     </hardware>
     <joint name="drivewhl1_joint">
