@@ -12,8 +12,11 @@
     <xacro:property name="wheel_width" value="0.035" />
     <xacro:property name="wheel_radial_dist" value="0.1805" />
     <xacro:property name="wheel_zoff" value="0.20" />
-    <xacro:property name="global_damping" value="0.5" />
-    <xacro:property name="global_friction" value="0.1" />
+    <!-- <xacro:property name="global_damping" value="0.5" /> -->
+    <!-- <xacro:property name="global_friction" value="0.1" /> -->
+
+    <xacro:property name="global_damping" value="0.0" />
+    <xacro:property name="global_friction" value="0.0" />
 
     <!-- Define some commonly used intertial properties  -->
     <xacro:macro name="box_inertia" params="m w h d">
@@ -76,8 +79,8 @@
           <joint_properties damping="${global_damping}" friction="${global_friction}" />
         </joint>
         <gazebo reference="${prefix}_link">
-          <mu1 value="0.1" />
-          <mu2 value="0.1" />
+          <mu1 value="0.0" />
+          <mu2 value="0.0" />
           <kp value="10000000.0" />
           <kd value="1.0" />
           <fdir1 value="1 0 0" />

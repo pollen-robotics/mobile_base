@@ -3,39 +3,39 @@
     <xacro:macro name="zuuu_gazebo" params="model prefix">
 
         <gazebo>
+        <!-- https://github.com/ros-simulation/gazebo_ros_pkgs/wiki/ROS-2-Migration:-Planar-Move -->
             <plugin name="object_controller" filename="libgazebo_ros_planar_move.so">
-
                 <ros>
-                <!-- <namespace>/demo</namespace> -->
-                <remapping>cmd_vel:=cmd_vel_gazebo</remapping>
-                <!-- <remapping>odom:=odom_demo</remapping> -->
+                    <!-- Add a namespace -->
+                    <!-- <namespace>/demo</namespace> -->
+                    <!-- Remap the default topic -->
+                    <remapping>cmd_vel:=cmd_vel_gazebo</remapping>
+                    <!-- <remapping>odom:=custom_odom</remapping> -->
                 </ros>
-                <!-- Caution the commandTopic field seems to be ignored, it seems to always listen to cmd_vel -->
-                <commandTopic>cmd_vel</commandTopic>
-                <odometryTopic>odom</odometryTopic>
-                <robotNamespace> </robotNamespace>
 
                 <!-- Set control loop update rate -->
-                <odometryRate>100</odometryRate>
+                <update_rate>100</update_rate>
                 <!-- Set odom publish rate -->
                 <publish_rate>100</publish_rate>
 
-                <!-- The odom info is used by zuuu_hal that publishes odom_zuuu and the TF -->
+                <!-- Set if odom required -->
                 <publish_odom>true</publish_odom>
                 <publish_odom_tf>false</publish_odom_tf>
 
                 <!-- Frame IDs -->
-                <odometryFrame>odom</odometryFrame>
-                <robotBaseFrame>base_link</robotBaseFrame>
+                <odometry_frame>odom</odometry_frame>
+                <robot_base_frame>base_link</robot_base_frame>
 
                 <!-- Set odom covariance -->
-
                 <covariance_x>0.0001</covariance_x>
                 <covariance_y>0.0001</covariance_y>
                 <covariance_yaw>0.01</covariance_yaw>
 
             </plugin>
         </gazebo>
+
+        
+
 
         <gazebo reference="lidar_link">
             <sensor name="lidar" type="ray">
