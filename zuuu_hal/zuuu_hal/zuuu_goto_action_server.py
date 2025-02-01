@@ -124,11 +124,11 @@ class ZuuuGotoActionServer(Node):
         """Setup the goto with the parameters from the request"""
         # Note: the PID values have default values in the goto_request message
         self.keep_control_on_arrival = goto_request.keep_control_on_arrival
+        self.dist_tol = goto_request.dist_tol
+        self.angle_tol = goto_request.angle_tol
         # Most values are stored in the zuuu_hal object as they are used in the control loop
-        self.zuuu_hal.distance_pid = PID(p=goto_request.distance_p, i=goto_request.distance_i, d=goto_request.distance_d, max_command=goto_request.distance_max_command, max_i_contribution=None)
-        self.zuuu_hal.angle_pid = PID(p=goto_request.angle_p, i=goto_request.angle_i, d=goto_request.angle_d, max_command=goto_request.angle_max_command, max_i_contribution=None)
-        self.zuuu_hal.dist_tol = goto_request.dist_tol
-        self.zuuu_hal.angle_tol = goto_request.angle_tol
+        self.zuuu_hal.distance_pid = PID(p=goto_request.distance_p, i=goto_request.distance_i, d=goto_request.distance_d, max_command=goto_request.distance_max_command, max_i_contribution=goto_request.distance_max_command/2.0)
+        self.zuuu_hal.angle_pid = PID(p=goto_request.angle_p, i=goto_request.angle_i, d=goto_request.angle_d, max_command=goto_request.angle_max_command, max_i_contribution=goto_request.angle_max_command/2.0)
         self.zuuu_hal.distance_pid.set_goal(0.0)
         self.zuuu_hal.angle_pid.set_goal(0.0)
         # Setting the goal values in zuuu_hal to keep compliance with e.g. DistanceToGoal service resquest
@@ -202,13 +202,13 @@ class ZuuuGotoActionServer(Node):
     def check_goto_arrived(self):
         """Checks if the robot has reached the goal pose and provides the current distance and angle errors.
         """
-        dx = -self.zuuu_hal.x_goal + self.zuuu_hal.x_odom
-        dy = -self.zuuu_hal.y_goal + self.zuuu_hal.y_odom
+        dx = self.zuuu_hal.x_odom - self.zuuu_hal.x_goal
+        dy = self.zuuu_hal.y_odom - self.zuuu_hal.y_goal
         distance_error = math.sqrt(dx ** 2 + dy ** 2)
 
-        angle_error = -self.zuuu_hal.theta_goal + self.zuuu_hal.theta_odom
+        angle_error = self.zuuu_hal.theta_odom - self.zuuu_hal.theta_goal
         arrived = False
-        if distance_error < self.zuuu_hal.dist_tol and abs(angle_error) < self.zuuu_hal.angle_tol:
+        if distance_error < self.dist_tol and abs(angle_error) < self.angle_tol:
             self.get_logger().info("Reached the goal position !")
             arrived = True
         return arrived, distance_error, angle_error

@@ -69,16 +69,14 @@ class PID:
             D {float} -- Differential gain (default: {0.0})
             max_command {float} -- The output command will be trimmed to +- max_command (default: {10})
             max_i_contribution {float} -- The integral contribution will be trimmed to
-                +- max_i_contribution (default: {5})
+                +- max_i_contribution. Rule of thumb: half of max_command. (default: {5})
         """
         self.p = p
         self.i = i
         self.d = d
         self.max_command = max_command
-        if max_i_contribution is None:
-            self.max_i_contribution = max_command/2.0
-        else:
-            self.max_i_contribution = max_i_contribution
+        
+        self.max_i_contribution = max_i_contribution
         self.goal_value = 0.0
         self.current_value = 0.0
 

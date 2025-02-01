@@ -108,15 +108,10 @@ class MobileBase:
         self.half_poles = 15.0
         self.left_wheel_rpm, self.right_wheel_rpm, self.back_wheel_rpm = 0, 0, 0
         self.left_wheel_avg_rpm, self.right_wheel_avg_rpm, self.back_wheel_avg_rpm = 0, 0, 0
-        (
-            self.left_wheel_rpm_deque,
-            self.right_wheel_rpm_deque,
-            self.back_wheel_rpm_deque,
-        ) = (
-            deque([], 10),
-            deque([], 10),
-            deque([], 10),
-        )
+        self.left_wheel_rpm_deque = deque([], 10)
+        self.right_wheel_rpm_deque = deque([], 10)
+        self.back_wheel_rpm_deque = deque([], 10)
+
         init_measurements_value = "No measurements in fake_hardware mode" if fake_hardware else None
         (
             self.left_wheel_measurements,
@@ -141,10 +136,9 @@ class MobileBase:
     def deque_to_avg(self, deque: deque) -> float:
         """Returns the average of the values contained in deque"""
         sum = 0
-        len = deque.maxlen
         for i in deque:
             sum += i
-        return sum / float(len)
+        return sum / float(len(deque))
 
 
 class ZuuuHAL(Node):
@@ -323,11 +317,14 @@ class ZuuuHAL(Node):
         # self.theta_pid = PID(p=3.2, i=14.2, d=0.475,
         #                      max_command=4.0, max_i_contribution=1.0)
         
-        self.distance_pid_cmd_goto = PID(p=5.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=None)
-        self.angle_pid_cmd_goto = PID(p=5.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=None)
+        self.distance_pid_cmd_goto = PID(p=5.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=0.2)
+        self.angle_pid_cmd_goto = PID(p=5.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=0.5)
         # TODO test IRL if this is a good idea. Not using it for now
-        # self.slow_distance_pid_cmd_goto = PID(p=1.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=None)
-        # self.slow_angle_pid_cmd_goto = PID(p=1.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=None)
+        # self.slow_distance_pid_cmd_goto = PID(p=1.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=0.2)
+        # self.slow_angle_pid_cmd_goto = PID(p=1.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=0.5)
+        self.distance_pid = PID(p=5.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=0.2)
+        self.angle_pid = PID(p=5.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=0.5)
+
 
         self.max_wheel_speed = self.pwm_to_wheel_rot_speed(self.max_duty_cyle)
         self.get_logger().info(
@@ -1416,10 +1413,6 @@ class ZuuuHAL(Node):
         """Tick function for the goto mode. Will calculate the robot's speed to reach a goal pose in the odometry frame.
         This function uses a PID controlle for translation and a PID controller for rotation.
         """
-        dx = -self.x_goal + self.x_odom
-        dy = -self.y_goal + self.y_odom
-        distance_error = math.sqrt(dx ** 2 + dy ** 2)
-        angle_error = -self.theta_goal + self.theta_odom
         if distance_pid is None:
             distance_pid = self.distance_pid
         else:
@@ -1429,6 +1422,11 @@ class ZuuuHAL(Node):
             angle_pid = self.angle_pid
         else:
             angle_pid = angle_pid
+            
+        dx = self.x_odom - self.x_goal
+        dy = self.y_odom - self.y_goal
+        distance_error = math.sqrt(dx ** 2 + dy ** 2)
+        angle_error = self.theta_odom - self.theta_goal
 
         dist_command = distance_pid.tick(distance_error)
         if not shortest_angle:
@@ -1438,15 +1436,16 @@ class ZuuuHAL(Node):
             # With this version the robot will rotate towards the goal with the shortest path
             angle_command = angle_pid.tick(angle_error, is_angle=True)
         
-        # The vector (dx, dy) is the vector from the robot to the goal in the odom frame
-        # Transforming that vector from the world-fixed odom frame to the robot-fixed frame
-        x_command = dx * math.cos(-self.theta_odom) - dy * math.sin(-self.theta_odom)
-        y_command = dx * math.sin(-self.theta_odom) + dy * math.cos(-self.theta_odom)
-        # Normalizing. The (x_command, y_command) vector is now a unit vector pointing towards the goal in the robot frame
         if distance_error == 0:
             x_command = 0
             y_command = 0
-        else:
+        else :
+            # The vector (dx, dy) is the vector from the robot to the goal in the odom frame
+            # Transforming that vector from the world-fixed odom frame to the robot-fixed frame
+            x_command = dx * math.cos(-self.theta_odom) - dy * math.sin(-self.theta_odom)
+            y_command = dx * math.sin(-self.theta_odom) + dy * math.cos(-self.theta_odom)
+            
+            # Normalizing. The (x_command, y_command) vector is now a unit vector pointing towards the goal in the robot frame
             x_command = x_command / distance_error 
             y_command = y_command / distance_error
             # Scaling the command vector by the PID output
