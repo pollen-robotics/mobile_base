@@ -421,75 +421,56 @@ class ZuuuHAL(Node):
         self.create_timer(self.omnibase.battery_check_period, self.check_battery)
 
 
-    def parameters_callback(self, params) -> SetParametersResult:
-        """When a ROS parameter is changed, this method will be called to verify the change and accept/deny it."""
+    # ---------------------------------------------------------------------------
+    # ROS Parameter Callback and Service Handlers (within ZuuuHAL class)
+    # ---------------------------------------------------------------------------
+
+    def parameters_callback(self, params: List[Parameter]) -> SetParametersResult:
+        """
+        Callback for dynamic parameter updates.
+        
+        Validates each changed parameter and updates the corresponding attribute if the value is acceptable.
+        Returns success if at least one parameter was accepted.
+        """
         success = False
+
+        # Define validation rules for numeric parameters.
+        # Each key maps to a tuple: (attribute_name, validation_function)
+        numeric_validators = {
+            "laser_upper_angle": ("laser_upper_angle", lambda v: True),
+            "laser_lower_angle": ("laser_lower_angle", lambda v: True),
+            "max_duty_cycle": ("max_duty_cycle", lambda v: 0.0 <= v <= 1.0),
+            "cmd_vel_timeout": ("cmd_vel_timeout", lambda v: v >= 0.0),
+            "max_full_com_fails": ("max_full_com_fails", lambda v: v >= 0.0),
+            "main_tick_period": ("main_tick_period", lambda v: v >= 0.0),
+            "max_accel_xy": ("max_accel_xy", lambda v: v >= 0.0),
+            "max_accel_theta": ("max_accel_theta", lambda v: v >= 0.0),
+            "max_speed_xy": ("max_speed_xy", lambda v: v >= 0.0),
+            "max_speed_theta": ("max_speed_theta", lambda v: v >= 0.0),
+            "xy_tol": ("xy_tol", lambda v: v >= 0.0),
+            "theta_tol": ("theta_tol", lambda v: v >= 0.0),
+            "smoothing_factor": ("smoothing_factor", lambda v: v >= 0.0),
+            "safety_distance": ("safety_distance", lambda v: v >= 0.0),
+            "critical_distance": ("critical_distance", lambda v: v >= 0.0),
+        }
+
         for param in params:
+            # Handle numeric parameters (DOUBLE or INTEGER).
             if param.type_ in [Parameter.Type.DOUBLE, Parameter.Type.INTEGER]:
-                if param.name == "laser_upper_angle":
-                    self.laser_upper_angle = param.value
-                    success = True
-                elif param.name == "laser_lower_angle":
-                    self.laser_lower_angle = param.value
-                    success = True
-                elif param.name == "max_duty_cycle":
-                    if param.value >= 0.0 and param.value <= 1.0:
-                        self.max_duty_cycle = param.value
-                        success = True
-                elif param.name == "cmd_vel_timeout":
-                    if param.value >= 0.0:
-                        self.cmd_vel_timeout = param.value
-                        success = True
-                elif param.name == "max_full_com_fails":
-                    if param.value >= 0.0:
-                        self.max_full_com_fails = param.value
-                        success = True
-                elif param.name == "main_tick_period":
-                    if param.value >= 0.0:
-                        self.main_tick_period = param.value
-                        success = True
-                elif param.name == "max_accel_xy":
-                    if param.value >= 0.0:
-                        self.max_accel_xy = param.value
-                        success = True
-                elif param.name == "max_accel_theta":
-                    if param.value >= 0.0:
-                        self.max_accel_theta = param.value
-                        success = True
-                elif param.name == "max_speed_xy":
-                    if param.value >= 0.0:
-                        self.max_speed_xy = param.value
-                        success = True
-                elif param.name == "max_speed_theta":
-                    if param.value >= 0.0:
-                        self.max_speed_theta = param.value
-                        success = True
-                elif param.name == "xy_tol":
-                    if param.value >= 0.0:
-                        self.xy_tol = param.value
-                        success = True
-                elif param.name == "theta_tol":
-                    if param.value >= 0.0:
-                        self.theta_tol = param.value
-                        success = True
-                elif param.name == "smoothing_factor":
-                    if param.value >= 0.0:
-                        self.smoothing_factor = param.value
-                        success = True
-                elif param.name == "safety_distance":
-                    if param.value >= 0.0:
-                        self.safety_distance = param.value
-                        success = True
-                elif param.name == "critical_distance":
-                    if param.value >= 0.0:
-                        self.critical_distance = param.value
+                if param.name in numeric_validators:
+                    attr_name, validator = numeric_validators[param.name]
+                    if validator(param.value):
+                        setattr(self, attr_name, param.value)
                         success = True
 
+            # Handle string parameters.
             elif param.type_ is Parameter.Type.STRING:
                 if param.name == "control_mode":
                     if param.value in [m.name for m in ZuuuControlModes]:
                         self.control_mode = ZuuuControlModes[param.value]
                         success = True
+
+            # Handle boolean parameters.
             elif param.type_ is Parameter.Type.BOOL:
                 if param.name == "safety_on":
                     self.safety_on = param.value
@@ -498,44 +479,57 @@ class ZuuuHAL(Node):
         return SetParametersResult(successful=success)
 
     def handle_zuuu_mode(self, request: SetZuuuMode.Request, response: SetZuuuMode.Response) -> SetZuuuMode.Response:
-        """Handle SetZuuuMode service request"""
-        self.get_logger().info("Requested mode change to :'{}'".format(request.mode))
+        """
+        Service handler for SetZuuuMode.
+        
+        Rejects manual mode changes for SPEED and GOTO modes,
+        and if the requested mode is acceptable, stops any ongoing services and updates the mode.
+        """
+        self.get_logger().info(f"Requested mode change to: '{request.mode}'")
         response.success = False
 
         if request.mode in [m.name for m in ZuuuModes]:
             if request.mode == ZuuuModes.SPEED.name:
                 self.get_logger().info(
-                    "'{}' should not be changed by hand, use the SetSpeed service instead".format(request.mode)
+                    f"'{request.mode}' should not be changed by hand; use the SetSpeed service instead."
                 )
             elif request.mode == ZuuuModes.GOTO.name:
                 self.get_logger().info(
-                    "'{}' should not be changed by hand, use the ZuuuGotoActionServer action server instead".format(
-                        request.mode
-                    )
+                    f"'{request.mode}' should not be changed by hand; use the ZuuuGotoActionServer action server instead."
                 )
             else:
-                # Changing the mode is a way to prematurely end an on going task requested through a service
+                # Changing the mode can be used to prematurely end an ongoing task.
                 self.stop_ongoing_services()
                 self.mode = ZuuuModes[request.mode]
                 response.success = True
-                self.get_logger().info("OK")
+                self.get_logger().info("Mode change accepted.")
+        else:
+            self.get_logger().warn(f"Unknown mode requested: '{request.mode}'")
 
         return response
 
     def handle_get_zuuu_mode(self, request: GetZuuuMode.Request, response: GetZuuuMode.Response) -> GetZuuuMode.Response:
-        """Handle GetZuuuMode service request"""
+        """Service handler for GetZuuuMode; returns the current mode."""
         response.mode = self.mode.name
         return response
 
     def handle_reset_odometry(self, request: ResetOdometry.Request, response: ResetOdometry.Response) -> ResetOdometry.Response:
-        """Handle ResetOdometry service request"""
-        # Resetting asynchronously to prevent race conditions.
+        """
+        Service handler for ResetOdometry.
+        
+        Sets a flag to asynchronously reset the odometry frame and acknowledges the request.
+        """
         self.reset_odom = True
-        self.get_logger().info("Requested to reset the odometry frame")
+        self.get_logger().info("Requested to reset the odometry frame.")
         response.success = True
         return response
 
     def handle_get_odometry(self, request: GetOdometry.Request, response: GetOdometry.Response) -> GetOdometry.Response:
+        """
+        Service handler for GetOdometry.
+        
+        Returns the current odometry information.
+        """
         response.x = self.x_odom
         response.y = self.y_odom
         response.theta = self.theta_odom
@@ -545,12 +539,15 @@ class ZuuuHAL(Node):
         return response
 
     def handle_set_speed(self, request: SetSpeed.Request, response: SetSpeed.Response) -> SetSpeed.Response:
-        """Handle SetSpeed service request"""
-        # This service automatically changes the zuuu mode
+        """
+        Service handler for SetSpeed.
+        
+        Switches the mode to SPEED, updates velocity goals, sets a deadline, and acknowledges the request.
+        """
         self.mode = ZuuuModes.SPEED
         self.get_logger().info(
-            f"Requested set_speed: duration={request.duration} x_vel='{request.x_vel}'m/s, y_vel='{request.y_vel}'m/s,"
-            f"rot_vel='{request.rot_vel}'rad/s"
+            f"Requested set_speed: duration={request.duration} | "
+            f"x_vel={request.x_vel} m/s, y_vel={request.y_vel} m/s, rot_vel={request.rot_vel} rad/s"
         )
         self.x_vel_goal = request.x_vel
         self.y_vel_goal = request.y_vel
@@ -560,36 +557,37 @@ class ZuuuHAL(Node):
         response.success = True
         return response
 
-    def handle_distance_to_goal(
-        self, request: DistanceToGoal.Request, response: DistanceToGoal.Response
-    ) -> DistanceToGoal.Response:
-        """Handle DistanceToGoal service resquest"""
+    def handle_distance_to_goal(self, request: DistanceToGoal.Request, response: DistanceToGoal.Response) -> DistanceToGoal.Response:
+        """
+        Service handler for DistanceToGoal.
+        
+        Computes and returns the delta in x, y, and theta, as well as the Euclidean distance from the current position to the goal.
+        """
         response.delta_x = self.x_goal - self.x_odom
         response.delta_y = self.y_goal - self.y_odom
         response.delta_theta = angle_diff(self.theta_goal, self.theta_odom)
-        response.distance = math.sqrt((self.x_goal - self.x_odom) ** 2 + (self.y_goal - self.y_odom) ** 2)
+        response.distance = math.hypot(self.x_goal - self.x_odom, self.y_goal - self.y_odom)
         return response
 
-    def handle_get_battery_voltage(
-        self, request: GetBatteryVoltage.Request, response: GetBatteryVoltage.Response
-    ) -> GetBatteryVoltage.Response:
-        """Handle GetBatteryVoltage service request"""
+    def handle_get_battery_voltage(self, request: GetBatteryVoltage.Request, response: GetBatteryVoltage.Response) -> GetBatteryVoltage.Response:
+        """Service handler for GetBatteryVoltage; returns the current battery voltage."""
         response.voltage = self.battery_voltage
         return response
 
-    def handle_zuuu_set_safety(
-        self, request: SetZuuuSafety.Request, response: SetZuuuSafety.Response
-    ) -> SetZuuuSafety.Response:
-        """Handle SetZuuuSafety service request"""
-        safety_on = request.safety_on
-        state = "ON" if safety_on else "OFF"
-        self.get_logger().info(f"Lidar safety is now {state}")
-        self.safety_on = safety_on
+    def handle_zuuu_set_safety(self, request: SetZuuuSafety.Request, response: SetZuuuSafety.Response) -> SetZuuuSafety.Response:
+        """
+        Service handler for SetZuuuSafety.
+        
+        Updates the safety settings (safety_on flag, safety distance, and critical distance) and acknowledges the request.
+        """
+        self.safety_on = request.safety_on
+        state_str = "ON" if request.safety_on else "OFF"
+        self.get_logger().info(f"Lidar safety is now {state_str}.")
         self.lidar_safety.safety_distance = request.safety_distance
         self.lidar_safety.critical_distance = request.critical_distance
         response.success = True
         return response
-
+    
     def handle_zuuu_get_safety(
         self, request: GetZuuuSafety.Request, response: GetZuuuSafety.Response
     ) -> GetZuuuSafety.Response:
@@ -599,7 +597,7 @@ class ZuuuHAL(Node):
         response.critical_distance = self.lidar_safety.critical_distance
         response.obstacle_detection_status = self.lidar_safety.obstacle_detection_status
         return response
-
+    
     def publish_mobile_base_state(self) -> None:
         """Publishes the safety status in the `mobile_base_safety_status` topic"""
         msg = MobileBaseState()
