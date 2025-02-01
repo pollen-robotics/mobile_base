@@ -144,6 +144,24 @@ class ZuuuHAL(Node):
 
         self.goto_action_server = ZuuuGotoActionServer(self, shared_callback_group)
 
+        # Initialization steps split into helper methods.
+        self._init_fake_hardware()
+        self._init_version_and_omnibase()
+        self.get_logger().info("Reading Zuuu's sensors once...")
+        self.read_measurements()
+        self._init_parameters()
+        self._init_state_variables()
+        self._init_pid_controllers()
+        self._init_ros_communications()
+        self._init_services()
+        self._init_transform_broadcaster()
+        self._init_misc_timers()
+
+    # -------------------------------------------------------------------------
+    # Private initialization helper methods.
+    # -------------------------------------------------------------------------
+
+    def _init_fake_hardware(self) -> None:
         self.declare_parameter("fake_hardware", False)
         self.fake_hardware: bool = self.get_parameter("fake_hardware").value
 
@@ -152,6 +170,7 @@ class ZuuuHAL(Node):
         else:
             self.get_logger().info("Running zuuu_hal on physical hardware\n")
 
+    def _init_version_and_omnibase(self) -> None:
         # Read version from configuration.
         reachy_config = ReachyConfig()
         self.zuuu_version: str = reachy_config.mobile_base_config["version_hard"]
@@ -181,9 +200,7 @@ class ZuuuHAL(Node):
                 left_wheel_id=None, right_wheel_id=72, back_wheel_id=116, fake_hardware=self.fake_hardware
             )
 
-        self.get_logger().info("Reading Zuuu's sensors once...")
-        self.read_measurements()
-
+    def _init_parameters(self) -> None:
         # Declare parameters.
         self.declare_parameters(
             namespace="",
@@ -249,6 +266,7 @@ class ZuuuHAL(Node):
         self.critical_distance: float = self.get_parameter("critical_distance").get_parameter_value().double_value
         self.safety_on: bool = self.get_parameter("safety_on").get_parameter_value().bool_value
 
+    def _init_state_variables(self) -> None:
         # Initialize state variables.
         self.cmd_vel: Optional[Twist] = None
         self.x_odom = 0.0
@@ -298,17 +316,18 @@ class ZuuuHAL(Node):
             fake_hardware=self.fake_hardware,
         )
         self.cv_bridge = CvBridge()
-       
+
+    def _init_pid_controllers(self) -> None:
         """
-        PID values tunned on Reachy 2 15/10/2024
-        The idea behind this tuning is that the proportional gain (P) is set quite high, 
-        as it's needed to overcome friction at low speeds. 
+        PID values tuned on Reachy 2 15/10/2024.
+        The idea behind this tuning is that the proportional gain (P) is set quite high,
+        as it's needed to overcome friction at low speeds.
         However, the maximum command is kept reasonable to limit the cruise speed.
 
-        We also tested a full PID tuning (instead of just P), but the promise of "eliminating the steady-state error" 
+        We also tested a full PID tuning (instead of just P), but the promise of "eliminating the steady-state error"
         does not work well with the small "steps" produced by the holonomic wheel.
         
-        No over-shoot Ziegler Nichols
+        No over-shoot Ziegler Nichols:
         self.theta_pid = PID(p=3.2, i=14.2, d=0.475, max_command=4.0, max_i_contribution=1.0)
         """
         self.distance_pid_cmd_goto = PID(p=5.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=0.2)
@@ -317,10 +336,6 @@ class ZuuuHAL(Node):
         # self.slow_distance_pid_cmd_goto = PID(p=1.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=0.2)
         # self.slow_angle_pid_cmd_goto = PID(p=1.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=0.5)
         
-        
-        # PID tuning parameters (tuned on a Reachy 2 on 15/10/2024).
-        self.distance_pid_cmd_goto = PID(p=5.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=0.2)
-        self.angle_pid_cmd_goto = PID(p=5.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=0.5)
         self.distance_pid = PID(p=5.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=0.2)
         self.angle_pid = PID(p=5.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=0.5)
 
@@ -329,6 +344,7 @@ class ZuuuHAL(Node):
             f"The maximum PWM value is {self.max_duty_cycle * 100}% => maximum wheel speed is set to {self.max_wheel_speed:.2f} rad/s"
         )
 
+    def _init_ros_communications(self) -> None:
         # Subscriptions.
         self.cmd_vel_sub = self.create_subscription(
             Twist,
@@ -360,6 +376,7 @@ class ZuuuHAL(Node):
         self.pub_odom = self.create_publisher(Odometry, "odom_zuuu", 2)
         self.pub_fake_vel = self.create_publisher(Twist, "cmd_vel_gazebo", 10)
 
+    def _init_services(self) -> None:
         # Services.
         self.mode_service = self.create_service(SetZuuuMode, "SetZuuuMode", self.handle_zuuu_mode)
         self.get_mode_service = self.create_service(GetZuuuMode, "GetZuuuMode", self.handle_get_zuuu_mode)
@@ -373,11 +390,14 @@ class ZuuuHAL(Node):
         self.set_safety_service = self.create_service(SetZuuuSafety, "SetZuuuSafety", self.handle_zuuu_set_safety)
         self.get_safety_service = self.create_service(GetZuuuSafety, "GetZuuuSafety", self.handle_zuuu_get_safety)
 
+    def _init_transform_broadcaster(self) -> None:
         # Initialize transform broadcaster.
         self.br = TransformBroadcaster(self)
-
         self.old_measure_timestamp = self.get_clock().now()
         self.measure_timestamp = self.get_clock().now()
+
+    def _init_misc_timers(self) -> None:
+        # Miscellaneous timers and measurements.
         self.cmd_vel_t0 = time.time()
         self.scan_t0 = time.time()
         self.t0 = time.time()
@@ -399,6 +419,7 @@ class ZuuuHAL(Node):
         self.measurements_t = time.time()
         self.check_battery()  # Check battery once at startup.
         self.create_timer(self.omnibase.battery_check_period, self.check_battery)
+
 
     def parameters_callback(self, params) -> SetParametersResult:
         """When a ROS parameter is changed, this method will be called to verify the change and accept/deny it."""
