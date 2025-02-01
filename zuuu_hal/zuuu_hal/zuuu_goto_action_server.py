@@ -84,12 +84,22 @@ class ZuuuGotoActionServer(Node):
             self.decrement_active_goals()
 
 
+    def cancel_current_goal(self):
+        if self.current_goal_handle is not None:
+            self.current_goal_handle.cancel()
+            self.current_goal_handle = None
+            
+    def cancel_all_future_goals(self):
+        while not self._goal_queue.empty():
+            server_goal_handle = self._goal_queue.get()
+            server_goal_handle.abort()
+            server_goal_handle.destroy()
+
     def execute_callback(self, goal_handle):
         """Execute a goal."""
         # Link to the documentation:
         # /opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/action/server.py
-        
-        start_time = time.time()
+        self.current_goal_handle = goal_handle
         goto_request = goal_handle.request.request  # zuuu_interfaces/ZuuuGotoRequest
         
         self.get_logger().info(f"Executing goal: {goto_request}")
@@ -100,9 +110,7 @@ class ZuuuGotoActionServer(Node):
         if ret == "no_longer_goto_mode":
             # Removing all the goals from the queue for safety
             self.get_logger().warning(f"A mode change happened during the goto execution. Removing all ({self._goal_queue.qsize()}) goals from the queue.")
-            while not self._goal_queue.empty():
-                server_goal_handle = self._goal_queue.get()
-                server_goal_handle.destroy()
+            self.cancel_all_future_goals()
         if ret == "canceled":
             q_size = self._goal_queue.qsize()
             if q_size == 0:
@@ -117,6 +125,7 @@ class ZuuuGotoActionServer(Node):
         result.result.status = ret
         self.get_logger().info(f"DEBUG PRINT returning result {result}")
 
+        self.current_goal_handle = None
         self.execution_ongoing.set()
         return result
     
@@ -131,7 +140,7 @@ class ZuuuGotoActionServer(Node):
         self.zuuu_hal.angle_pid = PID(p=goto_request.angle_p, i=goto_request.angle_i, d=goto_request.angle_d, max_command=goto_request.angle_max_command, max_i_contribution=goto_request.angle_max_command/2.0)
         self.zuuu_hal.distance_pid.set_goal(0.0)
         self.zuuu_hal.angle_pid.set_goal(0.0)
-        # Setting the goal values in zuuu_hal to keep compliance with e.g. DistanceToGoal service resquest
+        # Setting the goal values in zuuu_hal also keeps compliance with e.g. DistanceToGoal service resquest
         self.zuuu_hal.x_goal = goto_request.x_goal
         self.zuuu_hal.y_goal = goto_request.y_goal
         self.zuuu_hal.theta_goal = goto_request.theta_goal
@@ -140,6 +149,11 @@ class ZuuuGotoActionServer(Node):
             # TODO do this only if the queue is not empty
             self.get_logger().info(f"Switching from {self.zuuu_hal.mode} mode to {ZuuuModes.GOTO}.")
             self.zuuu_hal.mode = ZuuuModes.GOTO
+            
+    def set_goals_to_present_position(self):
+        self.zuuu_hal.x_goal = self.zuuu_hal.x_odom
+        self.zuuu_hal.y_goal = self.zuuu_hal.y_odom
+        self.zuuu_hal.theta_goal = self.zuuu_hal.theta_odom
     
     def goto_time(self, goal_handle, goto_request):
         """Blocking function that sends commands to the mobile base to reach a goal pose in the odometry frame.
@@ -154,6 +168,7 @@ class ZuuuGotoActionServer(Node):
             # The goal handle status can be changed with succeed(), abort() or canceled()
             t0_loop = time.time()
             if goal_handle.is_cancel_requested:
+                self.set_goals_to_present_position()
                 goal_handle.canceled()
                 self.get_logger().info("Goal canceled")
                 return "canceled"
@@ -161,6 +176,7 @@ class ZuuuGotoActionServer(Node):
             elapsed_time = time.time() - t0
             if elapsed_time > timeout:
                 self.get_logger().info(f"goto finished based on timeout")
+                self.set_goals_to_present_position()
                 goal_handle.abort()
                 return "timeout"
             if self.zuuu_hal.mode is ZuuuModes.GOTO :     
@@ -171,6 +187,7 @@ class ZuuuGotoActionServer(Node):
                     return "finished"
             else:
                 self.get_logger().info("Zuuu is not in GOTO mode anymore")
+                self.set_goals_to_present_position()
                 goal_handle.abort()
                 return "no_longer_goto_mode"
 

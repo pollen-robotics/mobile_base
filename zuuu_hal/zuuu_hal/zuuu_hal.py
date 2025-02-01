@@ -4,19 +4,6 @@
     The responsability of the node is to read the sensors, handle common calculations 
     (filtering, odometry, inverse kinematics) and exposing control interfaces.
 
-    The following ROS services are exposed to:
-    - Get or reset the odometry (GetOdometry, ResetOdometry)
-    - Get the battery voltage (GetBatteryVoltage)
-    - Set an (x_vel, y_vel, theta_vel) speed command for a fixed period of time (SetSpeed)
-    - Set a (x, y, theta) goal position in the odometric frame (GoToXYTheta, IsGoToFinished, DistanceToGoal)
-    - Manage drive modes (GetZuuuMode, SetZuuuMode)
-    - Enable/disable the LIDAR safety (SetZuuuSafety)
-
-    The following topics are published for:
-    - Filtering the LIDAR (scan_filterd)
-    - Reading the wheels rotational speed (back_wheel_rpm, left_wheel_rpm, right_wheel_rpm)
-    - Reading the odometry (odom)
-
     See params.yaml for the list of ROS parameters.
 """
 
@@ -64,8 +51,6 @@ from zuuu_interfaces.srv import (
     GetOdometry,
     GetZuuuMode,
     GetZuuuSafety,
-    GoToXYTheta,
-    IsGoToFinished,
     ResetOdometry,
     SetSpeed,
     SetZuuuMode,
@@ -288,7 +273,6 @@ class ZuuuHAL(Node):
         # self.mode = ZuuuModes.CMD_VEL
         self.speed_service_deadline = 0
         self.speed_service_on = False
-        self.goto_service_on = False
         self.lidar_mandatory = False
         self.scan_is_read = False
         self.scan_timeout = 0.5
@@ -376,11 +360,6 @@ class ZuuuHAL(Node):
         self.get_odometry_service = self.create_service(GetOdometry, "GetOdometry", self.handle_get_odometry)
 
         self.set_speed_service = self.create_service(SetSpeed, "SetSpeed", self.handle_set_speed)
-
-        # I chose not to make an action client. Could be changed if needed.
-        self.go_to_service = self.create_service(GoToXYTheta, "GoToXYTheta", self.handle_go_to)
-
-        self.is_go_to_finished = self.create_service(IsGoToFinished, "IsGoToFinished", self.handle_is_go_to_finished)
 
         self.distance_to_goal = self.create_service(DistanceToGoal, "DistanceToGoal", self.handle_distance_to_goal)
 
@@ -509,7 +488,7 @@ class ZuuuHAL(Node):
                 )
             elif request.mode == ZuuuModes.GOTO.name:
                 self.get_logger().info(
-                    "'{}' should not be changed by hand, use the GoToXYTheta service instead".format(request.mode)
+                    "'{}' should not be changed by hand, use the ZuuuGotoActionServer action server instead".format(request.mode)
                 )
             else:
                 # Changing the mode is a way to prematurely end an on going task requested through a service
@@ -556,29 +535,6 @@ class ZuuuHAL(Node):
         self.speed_service_deadline = time.time() + request.duration
         self.speed_service_on = True
         response.success = True
-        return response
-
-    def handle_go_to(self, request: GoToXYTheta.Request, response: GoToXYTheta.Response) -> GoToXYTheta.Response:
-        """Handle GoToXYTheta service request"""
-        # This service automatically changes the zuuu mode
-        self.mode = ZuuuModes.GOTO
-        self.get_logger().info(f"Requested go_to: x={request.x_goal}m, y={request.y_goal}m, theta={request.theta_goal}rad")
-        self.x_goal = request.x_goal
-        self.y_goal = request.y_goal
-        self.theta_goal = request.theta_goal
-        self.goto_service_on = True
-        self.x_pid.set_goal(self.x_goal)
-        self.y_pid.set_goal(self.y_goal)
-        self.theta_pid.set_goal(self.theta_goal)
-        response.success = True
-        return response
-
-    def handle_is_go_to_finished(
-        self, request: IsGoToFinished.Request, response: IsGoToFinished.Response
-    ) -> IsGoToFinished.Response:
-        """handle IsGoToFinished service request"""
-        # Returns True if the goal position is reached
-        response.success = self.goto_service_on
         return response
 
     def handle_distance_to_goal(
@@ -707,7 +663,8 @@ class ZuuuHAL(Node):
         self.scan_is_read = True
         self.scan_t0 = time.time()
         # LIDAR angle filter managemnt
-        # Temporary fix since https://github.com/ros-perception/laser_filters doesn't work on Foxy at the moment
+        # https://github.com/ros-perception/laser_filters was broken in ROS2 last time I checked
+        # => Doing it manually
         filtered_scan = LaserScan()
         filtered_scan.header = copy.deepcopy(msg.header)
         filtered_scan.angle_min = msg.angle_min
@@ -1095,21 +1052,22 @@ class ZuuuHAL(Node):
             self.y_odom_gazebo_old = self.y_odom_gazebo
             self.theta_odom_gazebo_old = self.theta_odom_gazebo
         
-            
         if self.reset_odom:
             # Resetting asynchronously to prevent race conditions.
             # dx, dy and dteta remain correct even on the reset tick
             self.reset_odom = False
             self.reset_odom_now()
-
-            # Resetting the odometry while a GoTo is ON might be dangerous. Stopping it to make sure:
-            if self.goto_service_on:
-                self.get_logger().warning("Resetting the odometry while a GoTo is ON. Stopping the GoTo.")
-                self.goto_service_on = False
+        
         self.publish_odometry_and_tf()
         # self.get_logger().info(f"XXX Odom: x={self.x_odom:.2f}m, y={self.y_odom:.2f}m, theta={self.theta_odom:.2f}rad")
 
     def reset_odom_now(self):
+        if self.mode is ZuuuModes.GOTO and self.goto_action_server.has_active_goals():
+            # Resetting the odometry while a GoTo is ON might be dangerous. Stopping it to make sure:
+            self.get_logger().warning("Resetting the odometry while a GoTo is ON. Stopping the GoTo and removing all goals.")
+            self.goto_action_server.cancel_current_goal()
+            self.goto_action_server.cancel_all_future_goals()
+            
         if self.fake_hardware:
             # TODO this is not enough, there is an accumulation of error when resetting the odometry in Gazebo mode
             self.theta_zuuu_vs_gazebo-=self.theta_odom
@@ -1213,7 +1171,6 @@ class ZuuuHAL(Node):
 
     def stop_ongoing_services(self) -> None:
         """Stops the GoTo and the SetSpeed services, if they were running"""
-        self.goto_service_on = False
         self.speed_service_on = False
 
     def did_mode_change(self, dx, dy, dtheta, almost_zero=0.001):
@@ -1473,6 +1430,10 @@ class ZuuuHAL(Node):
             
     def handle_stop_modes(self, mode):
         self.calculated_wheel_speeds = [0.0, 0.0, 0.0]
+        # To avoid smoothing shenanigans if we go back to a speed mode
+        self.x_vel_goal_filtered = 0.0
+        self.y_vel_goal_filtered = 0.0
+        self.theta_vel_goal_filtered = 0.0
         if mode is ZuuuModes.BRAKE:
             if not self.fake_hardware:
                 self.omnibase.back_wheel.set_duty_cycle(0)
