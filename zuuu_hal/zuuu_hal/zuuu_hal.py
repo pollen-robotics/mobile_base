@@ -9,8 +9,6 @@ See params.yaml for the list of ROS parameters.
 
 import copy
 import math
-import os
-import sys
 import threading
 import time
 import traceback
@@ -22,6 +20,7 @@ from typing import List, Deque, Optional, Any
 import numpy as np
 import rclpy
 import rclpy.logging
+from rclpy.callback_groups import CallbackGroup
 import tf_transformations
 from cv_bridge import CvBridge
 from geometry_msgs.msg import TransformStamped, Twist
@@ -29,8 +28,6 @@ from nav_msgs.msg import Odometry
 from pollen_msgs.msg import MobileBaseState
 from pyvesc.VESC import MultiVESC
 from rcl_interfaces.msg import SetParametersResult
-# from pollen_msgs.action import ZuuuGoto
-from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import (MutuallyExclusiveCallbackGroup,
                                    ReentrantCallbackGroup)
 from rclpy.constants import S_TO_NS
@@ -58,9 +55,9 @@ class MobileBase:
     def __init__(
         self,
         serial_port: str = "/dev/vesc_wheels",
-        left_wheel_id: int = 24,
-        right_wheel_id: int = 72,
-        back_wheel_id: int = 116,
+        left_wheel_id: Optional[int] = 24,
+        right_wheel_id: Optional[int] = 72,
+        back_wheel_id: Optional[int] = 116,
         fake_hardware: bool = False,
     ) -> None:
         params = [
@@ -134,14 +131,13 @@ class MobileBase:
 
 
 class ZuuuHAL(Node):
-    """Zuuu's Hardware Abstraction Layer node"""
+    """Zuuu's Hardware Abstraction Layer node."""
 
-    def __init__(self, shared_callback_group) -> None:
-        """Node initialisation.
-        ROS side: setup of the timers, callbacks, topics, services and parameters.
-        Low level side: connecting with the hardware and making a first read of the sensors.
-        Some interfaces are doubled and can be accessed through services or topics.
-        The topic interface is to be prefered when used at a high frequence as rclpy services can be too slow.
+    def __init__(self, shared_callback_group: CallbackGroup) -> None:
+        """
+        Node initialization.
+        ROS side: sets up timers, callbacks, topics, services, and parameters.
+        Low-level side: connects with the hardware and performs an initial sensor read.
         """
         super().__init__("zuuu_hal")
         self.get_logger().info("Starting zuuu_hal!")
@@ -149,29 +145,29 @@ class ZuuuHAL(Node):
         self.goto_action_server = ZuuuGotoActionServer(self, shared_callback_group)
 
         self.declare_parameter("fake_hardware", False)
-        self.fake_hardware = self.get_parameter("fake_hardware").value
+        self.fake_hardware: bool = self.get_parameter("fake_hardware").value
 
         if self.fake_hardware:
-            self.get_logger().info(
-                "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ Running zuuu_hal in fake hardware mode\n$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
-            )
-            # self.omnibase = MobileBase(left_wheel_id=None, right_wheel_id=None, back_wheel_id=None, fake_hardware=True)
+            self.get_logger().info("Running zuuu_hal in fake hardware mode\n")
         else:
-            # self.get_logger().info("Running zuuu_hal on physical hardware")
-            self.get_logger().info(
-                "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ Running zuuu_hal on physical hardware\n$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
-            )
+            self.get_logger().info("Running zuuu_hal on physical hardware\n")
 
+        # Read version from configuration.
         reachy_config = ReachyConfig()
-        self.zuuu_version = reachy_config.mobile_base_config["version_hard"]
+        self.zuuu_version: str = reachy_config.mobile_base_config["version_hard"]
         self.get_logger().info(f"zuuu version: {self.zuuu_version}")
+
         try:
             float_model = float(self.zuuu_version)
         except Exception:
-            msg = "ZUUU version can't be processed, check that the 'zuuu_version' tag is " "present in the .reachy.yaml file"
+            msg = (
+                "ZUUU version can't be processed, check that the 'zuuu_version' tag is present "
+                "in the .reachy.yaml file"
+            )
             self.get_logger().error(msg)
             self.get_logger().error(traceback.format_exc())
             raise RuntimeError(msg)
+
         if float_model < 1.0:
             self.omnibase = MobileBase(
                 left_wheel_id=24, right_wheel_id=72, back_wheel_id=None, fake_hardware=self.fake_hardware
@@ -188,12 +184,13 @@ class ZuuuHAL(Node):
         self.get_logger().info("Reading Zuuu's sensors once...")
         self.read_measurements()
 
+        # Declare parameters.
         self.declare_parameters(
             namespace="",
             parameters=[
                 ("laser_upper_angle", 2.85),
                 ("laser_lower_angle", -2.85),
-                ("max_duty_cyle", 0.20),
+                ("max_duty_cycle", 0.20),
                 ("cmd_vel_timeout", 0.2),
                 ("max_full_com_fails", 100),
                 ("main_tick_period", 0.012),
@@ -212,51 +209,48 @@ class ZuuuHAL(Node):
         )
         self.add_on_set_parameters_callback(self.parameters_callback)
 
-        # Making sure we don't run the node if the config file is not shared
-        if self.get_parameter("max_duty_cyle").type_ is Parameter.Type.NOT_SET:
+        # Ensure required parameters are initialized.
+        if self.get_parameter("max_duty_cycle").type_ is Parameter.Type.NOT_SET:
             self.get_logger().error(
-                "Parameter 'max_duty_cyle' was not initialized. Check that the param file is given to the node"
-                "(using the launch file is the way to go). Shutting down"
+                "Parameter 'max_duty_cycle' was not initialized. Check that the param file is provided (using the launch file is the way to go). Shutting down."
             )
             self.destroy_node()
         if self.get_parameter("smoothing_factor").type_ is Parameter.Type.NOT_SET:
             self.get_logger().error(
-                "Parameter 'smoothing_factor' was not initialized. Check that the param file is given to the node"
-                "(using the launch file is the way to go). Shutting down"
+                "Parameter 'smoothing_factor' was not initialized. Check that the param file is provided (using the launch file is the way to go). Shutting down."
             )
             self.destroy_node()
 
-        # Parameters initialisation
-        self.laser_upper_angle = self.get_parameter("laser_upper_angle").get_parameter_value().double_value  # math.pi
-        self.laser_lower_angle = self.get_parameter("laser_lower_angle").get_parameter_value().double_value  # -math.pi
-        self.max_duty_cyle = self.get_parameter("max_duty_cyle").get_parameter_value().double_value  # 0.3  # max is 1
-        self.cmd_vel_timeout = self.get_parameter("cmd_vel_timeout").get_parameter_value().double_value  # 0.2
-        self.max_full_com_fails = self.get_parameter("max_full_com_fails").get_parameter_value().integer_value  # 100
-        self.main_tick_period = self.get_parameter("main_tick_period").get_parameter_value().double_value  # 0.012
+        # Parameter initialization.
+        self.laser_upper_angle: float = self.get_parameter("laser_upper_angle").get_parameter_value().double_value
+        self.laser_lower_angle: float = self.get_parameter("laser_lower_angle").get_parameter_value().double_value
+        self.max_duty_cycle: float = self.get_parameter("max_duty_cycle").get_parameter_value().double_value
+        self.cmd_vel_timeout: float = self.get_parameter("cmd_vel_timeout").get_parameter_value().double_value
+        self.max_full_com_fails: int = self.get_parameter("max_full_com_fails").get_parameter_value().integer_value
+        self.main_tick_period: float = self.get_parameter("main_tick_period").get_parameter_value().double_value
 
         control_mode_param = self.get_parameter("control_mode")
         if control_mode_param.value in [m.name for m in ZuuuControlModes]:
-            # "OPEN_LOOP"
             self.control_mode = ZuuuControlModes[control_mode_param.value]
         else:
             self.get_logger().error(
-                f"Parameter 'control_mode' has an unknown value: '{control_mode_param.value}'. Shutting down"
+                f"Parameter 'control_mode' has an unknown value: '{control_mode_param.value}'. Shutting down."
             )
             self.destroy_node()
 
-        self.max_accel_xy = self.get_parameter("max_accel_xy").get_parameter_value().double_value  # 1.0
-        self.max_accel_theta = self.get_parameter("max_accel_theta").get_parameter_value().double_value  # 1.0
-        self.max_speed_xy = self.get_parameter("max_speed_xy").get_parameter_value().double_value  # 0.5
-        self.max_speed_theta = self.get_parameter("max_speed_theta").get_parameter_value().double_value  # 2.0
-        self.xy_tol = self.get_parameter("xy_tol").get_parameter_value().double_value  # 0.2
-        self.theta_tol = self.get_parameter("theta_tol").get_parameter_value().double_value  # 0.17
-        self.smoothing_factor = self.get_parameter("smoothing_factor").get_parameter_value().double_value  # 100.0
-        self.safety_distance = self.get_parameter("safety_distance").get_parameter_value().double_value
+        self.max_accel_xy: float = self.get_parameter("max_accel_xy").get_parameter_value().double_value
+        self.max_accel_theta: float = self.get_parameter("max_accel_theta").get_parameter_value().double_value
+        self.max_speed_xy: float = self.get_parameter("max_speed_xy").get_parameter_value().double_value
+        self.max_speed_theta: float = self.get_parameter("max_speed_theta").get_parameter_value().double_value
+        self.xy_tol: float = self.get_parameter("xy_tol").get_parameter_value().double_value
+        self.theta_tol: float = self.get_parameter("theta_tol").get_parameter_value().double_value
+        self.smoothing_factor: float = self.get_parameter("smoothing_factor").get_parameter_value().double_value
+        self.safety_distance: float = self.get_parameter("safety_distance").get_parameter_value().double_value
+        self.critical_distance: float = self.get_parameter("critical_distance").get_parameter_value().double_value
+        self.safety_on: bool = self.get_parameter("safety_on").get_parameter_value().bool_value
 
-        self.critical_distance = self.get_parameter("critical_distance").get_parameter_value().double_value
-        self.safety_on = self.get_parameter("safety_on").get_parameter_value().bool_value
-
-        self.cmd_vel = None
+        # Initialize state variables.
+        self.cmd_vel: Optional[Twist] = None
         self.x_odom = 0.0
         self.y_odom = 0.0
         self.theta_odom = 0.0
@@ -285,8 +279,7 @@ class ZuuuHAL(Node):
         self.calculated_wheel_speeds = [0.0, 0.0, 0.0]
         self.reset_odom = False
         self.battery_voltage = 25.0
-        self.mode = ZuuuModes.CMD_GOTO
-        # self.mode = ZuuuModes.CMD_VEL
+        self.mode = ZuuuModes.CMD_GOTO  # or ZuuuModes.CMD_VEL as needed
         self.speed_service_deadline = 0
         self.speed_service_on = False
         self.lidar_mandatory = False
@@ -295,6 +288,7 @@ class ZuuuHAL(Node):
         self.nb_control_ticks = 0
         self.stationary_on = False
         self.already_shutdown = False
+
         self.lidar_safety = LidarSafety(
             self.safety_distance,
             self.critical_distance,
@@ -304,41 +298,44 @@ class ZuuuHAL(Node):
             fake_hardware=self.fake_hardware,
         )
         self.cv_bridge = CvBridge()
-
+       
         """
-        PID values tunned on a Reachy 2 15/10/2024
+        PID values tunned on Reachy 2 15/10/2024
         The idea behind this tuning is that the proportional gain (P) is set quite high, 
         as it's needed to overcome friction at low speeds. 
         However, the maximum command is kept reasonable to limit the cruise speed.
 
         We also tested a full PID tuning (instead of just P), but the promise of "eliminating the steady-state error" 
-        doesn’t work well with the small "steps" produced by the holonomic wheel.
+        does not work well with the small "steps" produced by the holonomic wheel.
+        
+        No over-shoot Ziegler Nichols
+        self.theta_pid = PID(p=3.2, i=14.2, d=0.475, max_command=4.0, max_i_contribution=1.0)
         """
-        # "No over-shoot Ziegler Nichols"
-        # self.theta_pid = PID(p=3.2, i=14.2, d=0.475,
-        #                      max_command=4.0, max_i_contribution=1.0)
-
         self.distance_pid_cmd_goto = PID(p=5.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=0.2)
         self.angle_pid_cmd_goto = PID(p=5.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=0.5)
         # TODO test IRL if this is a good idea. Not using it for now
         # self.slow_distance_pid_cmd_goto = PID(p=1.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=0.2)
         # self.slow_angle_pid_cmd_goto = PID(p=1.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=0.5)
+        
+        
+        # PID tuning parameters (tuned on a Reachy 2 on 15/10/2024).
+        self.distance_pid_cmd_goto = PID(p=5.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=0.2)
+        self.angle_pid_cmd_goto = PID(p=5.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=0.5)
         self.distance_pid = PID(p=5.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=0.2)
         self.angle_pid = PID(p=5.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=0.5)
 
-        self.max_wheel_speed = self.pwm_to_wheel_rot_speed(self.max_duty_cyle)
+        self.max_wheel_speed = self.pwm_to_wheel_rot_speed(self.max_duty_cycle)
         self.get_logger().info(
-            f"The maximum PWM value is {self.max_duty_cyle*100}% => maximum wheel speed is set to "
-            f"{self.max_wheel_speed:.2f}rad/s"
+            f"The maximum PWM value is {self.max_duty_cycle * 100}% => maximum wheel speed is set to {self.max_wheel_speed:.2f} rad/s"
         )
 
+        # Subscriptions.
         self.cmd_vel_sub = self.create_subscription(
             Twist,
             "cmd_vel",
             self.cmd_vel_callback,
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT),
         )
-
         self.scan_sub = self.create_subscription(
             LaserScan,
             "/scan",
@@ -346,7 +343,7 @@ class ZuuuHAL(Node):
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT),
         )
         if self.fake_hardware:
-            # In Gazebo mode we'll subscribe to the odom topic published by the gazebo plugin
+            # In Gazebo mode subscribe to the odom topic published by the gazebo plugin.
             self.odom_sub = self.create_subscription(
                 Odometry,
                 "odom",
@@ -359,40 +356,28 @@ class ZuuuHAL(Node):
         self.pub_back_wheel_rpm = self.create_publisher(Float32, "back_wheel_rpm", 2)
         self.pub_left_wheel_rpm = self.create_publisher(Float32, "left_wheel_rpm", 2)
         self.pub_right_wheel_rpm = self.create_publisher(Float32, "right_wheel_rpm", 2)
-
-        # distance to goal publisher replacing the old service `DistanceToGoal`
         self.pub_mobile_base_state = self.create_publisher(MobileBaseState, "mobile_base_state", 2)
-
         self.pub_odom = self.create_publisher(Odometry, "odom_zuuu", 2)
-
         self.pub_fake_vel = self.create_publisher(Twist, "cmd_vel_gazebo", 10)
 
+        # Services.
         self.mode_service = self.create_service(SetZuuuMode, "SetZuuuMode", self.handle_zuuu_mode)
-
         self.get_mode_service = self.create_service(GetZuuuMode, "GetZuuuMode", self.handle_get_zuuu_mode)
-
         self.reset_odometry_service = self.create_service(ResetOdometry, "ResetOdometry", self.handle_reset_odometry)
-
         self.get_odometry_service = self.create_service(GetOdometry, "GetOdometry", self.handle_get_odometry)
-
         self.set_speed_service = self.create_service(SetSpeed, "SetSpeed", self.handle_set_speed)
-
         self.distance_to_goal = self.create_service(DistanceToGoal, "DistanceToGoal", self.handle_distance_to_goal)
-
         self.get_battery_voltage_service = self.create_service(
             GetBatteryVoltage, "GetBatteryVoltage", self.handle_get_battery_voltage
         )
-
         self.set_safety_service = self.create_service(SetZuuuSafety, "SetZuuuSafety", self.handle_zuuu_set_safety)
-
         self.get_safety_service = self.create_service(GetZuuuSafety, "GetZuuuSafety", self.handle_zuuu_get_safety)
 
-        # Initialize the transform broadcaster
+        # Initialize transform broadcaster.
         self.br = TransformBroadcaster(self)
 
         self.old_measure_timestamp = self.get_clock().now()
         self.measure_timestamp = self.get_clock().now()
-        # *sigh* if needed use: https://github.com/ros2/rclpy/blob/master/rclpy/test/test_time.py
         self.cmd_vel_t0 = time.time()
         self.scan_t0 = time.time()
         self.t0 = time.time()
@@ -409,11 +394,10 @@ class ZuuuHAL(Node):
         self.dir_p1 = [1.0, 0.0]
         self.dir_angle = 0.0
 
+        # Timers.
         self.create_timer(self.main_tick_period, self.main_tick)
-        # self.create_timer(0.1, self.main_tick)
         self.measurements_t = time.time()
-        # Checking battery once at the start, then periodically
-        self.check_battery()
+        self.check_battery()  # Check battery once at startup.
         self.create_timer(self.omnibase.battery_check_period, self.check_battery)
 
     def parameters_callback(self, params) -> SetParametersResult:
@@ -427,9 +411,9 @@ class ZuuuHAL(Node):
                 elif param.name == "laser_lower_angle":
                     self.laser_lower_angle = param.value
                     success = True
-                elif param.name == "max_duty_cyle":
+                elif param.name == "max_duty_cycle":
                     if param.value >= 0.0 and param.value <= 1.0:
-                        self.max_duty_cyle = param.value
+                        self.max_duty_cycle = param.value
                         success = True
                 elif param.name == "cmd_vel_timeout":
                     if param.value >= 0.0:
@@ -1100,15 +1084,15 @@ class ZuuuHAL(Node):
         self.theta_odom = 0.0
 
     def limit_duty_cycles(self, duty_cycles: List[float]) -> List[float]:
-        """Limits the duty cycles to stay in +-max_duty_cyle"""
+        """Limits the duty cycles to stay in +-max_duty_cycle"""
         for i in range(len(duty_cycles)):
             if duty_cycles[i] < 0:
-                temp = max(-self.max_duty_cyle, duty_cycles[i])
+                temp = max(-self.max_duty_cycle, duty_cycles[i])
                 if temp != duty_cycles[i]:
                     self.get_logger().warning("Duty cycle is LIMITED")
                 duty_cycles[i] = temp
             else:
-                temp = min(self.max_duty_cyle, duty_cycles[i])
+                temp = min(self.max_duty_cycle, duty_cycles[i])
                 if temp != duty_cycles[i]:
                     self.get_logger().warning("Duty cycle is LIMITED")
                 duty_cycles[i] = temp

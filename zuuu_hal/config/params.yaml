@@ -2,7 +2,7 @@ zuuu_hal:
   ros__parameters:
     laser_upper_angle: 2.12 # value tuned for a Reachy2 with a tripod
     laser_lower_angle: -2.12 # is often -laser_upper_angle
-    max_duty_cyle: 0.50 # max is 1.0
+    max_duty_cycle: 0.50 # max is 1.0
     cmd_vel_timeout: 0.2
     max_full_com_fails: 100
     main_tick_period: 0.012
