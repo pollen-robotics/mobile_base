@@ -401,7 +401,7 @@ class ZuuuHAL(Node):
         self.check_battery()
         self.create_timer(self.omnibase.battery_check_period, self.check_battery)
 
-    def parameters_callback(self, params) -> None:
+    def parameters_callback(self, params) -> SetParametersResult:
         """When a ROS parameter is changed, this method will be called to verify the change and accept/deny it."""
         success = False
         for param in params:
