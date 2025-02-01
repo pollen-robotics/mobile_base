@@ -41,6 +41,7 @@ class ZuuuGotoActionServer(Node):
         # Not sending the feedback every tick
         self.nb_commands_per_feedback = 10
         self.sampling_freq = 100  # Hz
+        self.cancel_current_goal_toggle = False
         self.get_logger().info("Zuuu Goto action server init.")
         # create thread for check_queue_and_execute
         self.check_queue_and_execute_thread = threading.Thread(
@@ -77,6 +78,7 @@ class ZuuuGotoActionServer(Node):
     def check_queue_and_execute(self):
         while True:
             goal_handle = self._goal_queue.get()
+            self.cancel_current_goal_toggle = False
             self.execution_ongoing.clear()
             self.increment_active_goals()
             goal_handle.execute()
@@ -85,49 +87,57 @@ class ZuuuGotoActionServer(Node):
 
 
     def cancel_current_goal(self):
-        if self.current_goal_handle is not None:
-            self.current_goal_handle.cancel()
-            self.current_goal_handle = None
+        self.get_logger().info(f"cancelling current goal")
+        self.cancel_current_goal_toggle = True
+        
+        # if self.current_goal_handle is not None:
+        #     self.current_goal_handle.abort()
+        #     self.current_goal_handle = None
             
     def cancel_all_future_goals(self):
+        self.get_logger().info(f"cancelling all future goals")
+        
         while not self._goal_queue.empty():
             server_goal_handle = self._goal_queue.get()
-            server_goal_handle.abort()
+            # server_goal_handle.canceled()
             server_goal_handle.destroy()
 
     def execute_callback(self, goal_handle):
         """Execute a goal."""
         # Link to the documentation:
         # /opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/action/server.py
-        self.current_goal_handle = goal_handle
-        goto_request = goal_handle.request.request  # zuuu_interfaces/ZuuuGotoRequest
-        
-        self.get_logger().info(f"Executing goal: {goto_request}")
-        
-        self.setup_goto(goto_request)
-        
-        ret = self.goto_time(goal_handle, goto_request)
-        if ret == "no_longer_goto_mode":
-            # Removing all the goals from the queue for safety
-            self.get_logger().warning(f"A mode change happened during the goto execution. Removing all ({self._goal_queue.qsize()}) goals from the queue.")
-            self.cancel_all_future_goals()
-        if ret == "canceled":
-            q_size = self._goal_queue.qsize()
-            if q_size == 0:
-                self.get_logger().info(f"Goal canceled and no other goals in the queue => Brake mode")
-                self.zuuu_hal.mode = ZuuuModes.BRAKE     
-        elif (not self.keep_control_on_arrival) and (self._goal_queue.qsize() == 0):
-            # Changing the mode to BRAKE when the goal is reached and there are no other goals in the queue
-            self.zuuu_hal.mode = ZuuuModes.BRAKE
+        try :
+            self.current_goal_handle = goal_handle
+            goto_request = goal_handle.request.request  # zuuu_interfaces/ZuuuGotoRequest
+            
+            self.get_logger().info(f"Executing goal: {goto_request}")
+            
+            self.setup_goto(goto_request)
+            
+            ret = self.goto_time(goal_handle, goto_request)
+            if ret == "no_longer_goto_mode":
+                # Removing all the goals from the queue for safety
+                self.get_logger().warning(f"A mode change happened during the goto execution. Removing all ({self._goal_queue.qsize()}) goals from the queue.")
+                self.cancel_all_future_goals()
+            if ret == "canceled":
+                q_size = self._goal_queue.qsize()
+                if q_size == 0:
+                    self.get_logger().info(f"Goal canceled and no other goals in the queue => Brake mode")
+                    self.zuuu_hal.mode = ZuuuModes.BRAKE     
+            elif (not self.keep_control_on_arrival) and (self._goal_queue.qsize() == 0):
+                # Changing the mode to BRAKE when the goal is reached and there are no other goals in the queue
+                self.zuuu_hal.mode = ZuuuModes.BRAKE
 
-        # Populate result message
-        result = ZuuuGoto.Result()
-        result.result.status = ret
-        self.get_logger().info(f"DEBUG PRINT returning result {result}")
+            # Populate result message
+            result = ZuuuGoto.Result()
+            result.result.status = ret
+            self.get_logger().info(f"DEBUG PRINT returning result {result}")
 
-        self.current_goal_handle = None
-        self.execution_ongoing.set()
-        return result
+            self.current_goal_handle = None
+            self.execution_ongoing.set()
+            return result
+        except Exception as e:
+            self.zuuu_hal.emergency_shutdown(f"Exception in goto_time: {e}")
     
     def setup_goto(self, goto_request):
         """Setup the goto with the parameters from the request"""
@@ -160,44 +170,52 @@ class ZuuuGotoActionServer(Node):
         This function will update the goal_handle state, publish feedback and return when the goal is reached or the timeout is reached
         or the goal is canceled by the client.
         """
-        t0 = time.time()
-        dt = 1 / self.sampling_freq
-        timeout = goto_request.timeout
-        commands_sent = 0
-        while True:
-            # The goal handle status can be changed with succeed(), abort() or canceled()
-            t0_loop = time.time()
-            if goal_handle.is_cancel_requested:
-                self.set_goals_to_present_position()
-                goal_handle.canceled()
-                self.get_logger().info("Goal canceled")
-                return "canceled"
+        try:
+            t0 = time.time()
+            dt = 1 / self.sampling_freq
+            timeout = goto_request.timeout
+            commands_sent = 0
+            while True:
+                t0_loop = time.time()
+                
+                # Check for cancellation
+                if goal_handle.is_cancel_requested or self.cancel_current_goal_toggle:
+                    self.set_goals_to_present_position()
+                    goal_handle.canceled()
+                    self.get_logger().info("Goal canceled")
+                    return "canceled"
 
-            elapsed_time = time.time() - t0
-            if elapsed_time > timeout:
-                self.get_logger().info(f"goto finished based on timeout")
-                self.set_goals_to_present_position()
-                goal_handle.abort()
-                return "timeout"
-            if self.zuuu_hal.mode is ZuuuModes.GOTO :     
-                # The control calculations and speed commands updates are performed in the zuuu_hal control loop
-                arrived, distance_error, angle_error = self.check_goto_arrived()
-                if arrived:
-                    goal_handle.succeed()
-                    return "finished"
-            else:
-                self.get_logger().info("Zuuu is not in GOTO mode anymore")
-                self.set_goals_to_present_position()
-                goal_handle.abort()
-                return "no_longer_goto_mode"
+                # Timeout condition
+                elapsed_time = time.time() - t0
+                if elapsed_time > timeout:
+                    self.get_logger().info(f"goto finished based on timeout")
+                    self.set_goals_to_present_position()
+                    goal_handle.abort()
+                    return "timeout"
+                
+                if self.zuuu_hal.mode is ZuuuModes.GOTO :     
+                    # The control calculations and speed commands updates are performed in the zuuu_hal control loop
+                    arrived, distance_error, angle_error = self.check_goto_arrived()
+                    if arrived:
+                        goal_handle.succeed()
+                        return "finished"
+                else:
+                    self.get_logger().info("Zuuu is not in GOTO mode anymore")
+                    self.set_goals_to_present_position()
+                    goal_handle.abort()
+                    return "no_longer_goto_mode"
 
-            # Publishing feedback every nb_commands_per_feedback ticks
-            commands_sent += 1
-            if commands_sent % self.nb_commands_per_feedback == 0:                
-                self.generate_and_publish_feedback(goal_handle, distance_error, angle_error)
+                # Publishing feedback every nb_commands_per_feedback ticks
+                commands_sent += 1
+                if commands_sent % self.nb_commands_per_feedback == 0:                
+                    self.generate_and_publish_feedback(goal_handle, distance_error, angle_error)
 
-            # self.rate.sleep()  # Slowly the output freq drops with this... A bug I could not find.
-            time.sleep(max(0, dt - (time.time() - t0_loop)))
+                # Maintain loop frequency
+                # self.rate.sleep()  # Slowly the output freq drops with this... A bug I could not find.
+                time.sleep(max(0, dt - (time.time() - t0_loop)))
+        except Exception as e:
+            self.zuuu_hal.emergency_shutdown(f"Exception in goto_time: {e}")
+            
 
     def cancel_callback(self, goal_handle):
         """Accept or reject a client request to cancel an action."""

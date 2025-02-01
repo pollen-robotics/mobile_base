@@ -11,7 +11,15 @@ print("resetting odometry...")
 reachy.mobile_base.reset_odometry()
 time.sleep(1.0)
 
-## TODO test reset_odometry during a list of gotos
+
+input("Press Enter to request several gotos, start moving and 1 seconds later, reset the odometry. The robot should stop and cancell all goals")
+print("Requesting several gotos")
+reachy.mobile_base.goto(x=1.0, y=0.0, theta=00.0, wait=False, degrees=True, distance_tolerance=0.05, angle_tolerance=5.0, timeout=10000)
+reachy.mobile_base.goto(x=1.0, y=1.0, theta=00.0, wait=False, degrees=True, distance_tolerance=0.05, angle_tolerance=5.0, timeout=10000)
+reachy.mobile_base.goto(x=1.0, y=1.0, theta=90.0, wait=False, degrees=True, distance_tolerance=0.05, angle_tolerance=5.0, timeout=10000)
+time.sleep(1.0)
+reachy.mobile_base.reset_odometry()
+
 
 input("Press Enter to test the turn off. The robot should move forward for 2 seconds")
 reachy.mobile_base.goto(x=1.0, y=0.0, theta=00.0, wait=False, degrees=True, distance_tolerance=0.05, angle_tolerance=5.0, timeout=10000)

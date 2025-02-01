@@ -278,6 +278,7 @@ class ZuuuHAL(Node):
         self.scan_timeout = 0.5
         self.nb_control_ticks = 0
         self.stationary_on = False
+        self.already_shutdown = False
         self.lidar_safety = LidarSafety(
             self.safety_distance,
             self.critical_distance,
@@ -635,23 +636,39 @@ class ZuuuHAL(Node):
         elif voltage < min_voltage:
             msg = "Battery voltage critically LOW ({}V). Emergency shutdown! Warning threshold: {:.1f}V, "
             "stop threshold: {:.1f}V".format(voltage, warn_voltage, min_voltage)
-            self.get_logger().error(msg)
-            self.emergency_shutdown()
-            raise RuntimeError(msg)
+            self.emergency_shutdown(msg)
+            
         else:
             self.get_logger().warning("Battery voltage OK ({}V)".format(voltage))
 
-    def emergency_shutdown(self) -> None:
-        """Sets a PWM of 0V to the three wheel motors, equivalent to a brake."""
-        if not self.fake_hardware:
-            self.omnibase.back_wheel.set_duty_cycle(0)
-            self.omnibase.left_wheel.set_duty_cycle(0)
-            self.omnibase.right_wheel.set_duty_cycle(0)
-        else:
-            self.publish_fake_robot_speed(0, 0, 0)
+    
+    def emergency_shutdown(self, msg: str) -> None:
+        """
+        Sets the PWM of the three wheel motors to 0V (i.e., brakes the system) and raises a RuntimeError.
         
-        self.get_logger().warn("Emergency shutdown!")
+        """
+        self.get_logger().warn(f"Emergency shutdown initiated in zuuu_hal: {msg}")
+        
+        if self.already_shutdown:
+            return
+
+        try:
+            if not self.fake_hardware:
+                self.omnibase.back_wheel.set_duty_cycle(0)
+                self.omnibase.left_wheel.set_duty_cycle(0)
+                self.omnibase.right_wheel.set_duty_cycle(0)
+            else:
+                self.publish_fake_robot_speed(0, 0, 0)
+        except Exception as hardware_error:
+            self.get_logger().error(f"Error during hardware shutdown: {hardware_error}")
+        finally:
+            self.already_shutdown = True
+
+
         time.sleep(0.1)
+        
+        raise RuntimeError(msg)
+
 
     def cmd_vel_callback(self, msg: Twist) -> None:
         """Handles the callback on the /cmd_vel topic"""
@@ -1144,9 +1161,7 @@ class ZuuuHAL(Node):
             #     "Could not read any of the motor drivers. This should not happen too often.")
             if self.nb_full_com_fails > self.max_full_com_fails:
                 msg = "Too many communication errors, emergency shutdown"
-                self.get_logger().error(msg)
-                self.emergency_shutdown()
-                raise RuntimeError(msg)
+                self.emergency_shutdown(msg)
             return
         # Read success
         self.nb_full_com_fails = 0
@@ -1205,9 +1220,7 @@ class ZuuuHAL(Node):
                     break
             if not found:
                 msg = "Impossible case in the joy discretization angle function, stopping for safety"
-                self.get_logger().error(msg)
-                self.emergency_shutdown()
-                raise RuntimeError(msg)
+                self.emergency_shutdown(msg)
 
         if abs(dtheta) < almost_zero:
             rotation_on = False
@@ -1451,9 +1464,7 @@ class ZuuuHAL(Node):
                 self.publish_fake_robot_speed(0, 0, 0)
         else:
             msg = "Mode requested: {} => calling emergency_shutdown".format(mode)
-            self.get_logger().warning(msg)
-            self.emergency_shutdown()
-            raise RuntimeError(msg)
+            self.emergency_shutdown(msg)
             
     def control_tick(self):
         if self.mode in ZuuuModes.speed_modes():
@@ -1548,28 +1559,31 @@ class ZuuuHAL(Node):
 
 def main(args=None) -> None:
     """Run ZuuuHAL main loop"""
-    rclpy.init(args=args)
-    
-    
-    callback_group = MutuallyExclusiveCallbackGroup() # ReentrantCallbackGroup() brings bad memories, avoiding it if possible
-    
-
-    zuuu_hal = ZuuuHAL(callback_group)
-
-    mult_executor = MultiThreadedExecutor()
-    mult_executor.add_node(zuuu_hal)
-    mult_executor.add_node(zuuu_hal.goto_action_server)
-    executor_thread = threading.Thread(target=mult_executor.spin, daemon=True)
-    executor_thread.start()
-    rate = zuuu_hal.create_rate(2.0)
-
     try:
+    
+        rclpy.init(args=args)
+        
+        
+        callback_group = MutuallyExclusiveCallbackGroup() # ReentrantCallbackGroup() brings bad memories, avoiding it if possible
+        
+
+        zuuu_hal = ZuuuHAL(callback_group)
+
+        mult_executor = MultiThreadedExecutor()
+        mult_executor.add_node(zuuu_hal)
+        mult_executor.add_node(zuuu_hal.goto_action_server)
+        executor_thread = threading.Thread(target=mult_executor.spin, daemon=True)
+        executor_thread.start()
+        rate = zuuu_hal.create_rate(2.0)
+
         while rclpy.ok():
+            rclpy.logging._root_logger.info("tick")
             rate.sleep()
     except KeyboardInterrupt:
-        rclpy.logging._root_logger.error(traceback.format_exc())
-    finally:
-        zuuu_hal.emergency_shutdown()
+        # rclpy.logging._root_logger.error(traceback.format_exc())
+        rclpy.logging._root_logger.error("KeyboardInterrupt in zuuu_hal")
+    finally:        
+        zuuu_hal.emergency_shutdown("Default zuuu_hal shutdown")
         rclpy.shutdown()
         executor_thread.join()
     
