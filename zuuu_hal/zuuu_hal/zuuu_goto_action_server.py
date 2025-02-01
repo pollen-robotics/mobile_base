@@ -41,7 +41,7 @@ class ZuuuGotoActionServer(Node):
         # Not sending the feedback every tick
         self.nb_commands_per_feedback = 10
         self.sampling_freq = 100  # Hz
-        self.cancel_current_goal_toggle = False
+        self.nb_remaining_deletions = 0
         self.get_logger().info("Zuuu Goto action server init.")
         # create thread for check_queue_and_execute
         self.check_queue_and_execute_thread = threading.Thread(
@@ -78,62 +78,60 @@ class ZuuuGotoActionServer(Node):
     def check_queue_and_execute(self):
         while True:
             goal_handle = self._goal_queue.get()
-            self.cancel_current_goal_toggle = False
             self.execution_ongoing.clear()
             self.increment_active_goals()
             goal_handle.execute()
             self.execution_ongoing.wait()
             self.decrement_active_goals()
 
-
-    def cancel_current_goal(self):
-        self.get_logger().info(f"cancelling current goal")
-        self.cancel_current_goal_toggle = True
-        
-        # if self.current_goal_handle is not None:
-        #     self.current_goal_handle.abort()
-        #     self.current_goal_handle = None
             
     def cancel_all_future_goals(self):
         self.get_logger().info(f"cancelling all future goals")
         
         while not self._goal_queue.empty():
             server_goal_handle = self._goal_queue.get()
-            # server_goal_handle.canceled()
-            server_goal_handle.destroy()
+            server_goal_handle.abort()
+            # server_goal_handle.destroy()
 
     def execute_callback(self, goal_handle):
         """Execute a goal."""
         # Link to the documentation:
         # /opt/ros/humble/local/lib/python3.10/dist-packages/rclpy/action/server.py
         try :
-            self.current_goal_handle = goal_handle
-            goto_request = goal_handle.request.request  # zuuu_interfaces/ZuuuGotoRequest
             
-            self.get_logger().info(f"Executing goal: {goto_request}")
-            
-            self.setup_goto(goto_request)
-            
-            ret = self.goto_time(goal_handle, goto_request)
-            if ret == "no_longer_goto_mode":
-                # Removing all the goals from the queue for safety
-                self.get_logger().warning(f"A mode change happened during the goto execution. Removing all ({self._goal_queue.qsize()}) goals from the queue.")
-                self.cancel_all_future_goals()
-            if ret == "canceled":
-                q_size = self._goal_queue.qsize()
-                if q_size == 0:
-                    self.get_logger().info(f"Goal canceled and no other goals in the queue => Brake mode")
-                    self.zuuu_hal.mode = ZuuuModes.BRAKE     
-            elif (not self.keep_control_on_arrival) and (self._goal_queue.qsize() == 0):
-                # Changing the mode to BRAKE when the goal is reached and there are no other goals in the queue
-                self.zuuu_hal.mode = ZuuuModes.BRAKE
-
+            if self.nb_remaining_deletions == 0:
+                # Normal execution
+                goto_request = goal_handle.request.request  # zuuu_interfaces/ZuuuGotoRequest
+                
+                self.get_logger().info(f"Executing goal: {goto_request}")
+                
+                self.setup_goto(goto_request)
+                
+                ret = self.goto_time(goal_handle, goto_request)
+                if ret == "no_longer_goto_mode":
+                    # Removing all the goals from the queue for safety
+                    self.nb_remaining_deletions = self._goal_queue.qsize()
+                    self.get_logger().warning(f"A mode change happened during the goto execution. Removing all ({self.nb_remaining_deletions}) goals from the queue.")
+                    # Note: a method to cancel all goals would have been nice, but accepted goals can't be canceled nor aborted before being executed:
+                    # https://design.ros2.org/articles/actions.html
+                elif ret == "canceled":
+                    q_size = self._goal_queue.qsize()
+                    if q_size == 0:
+                        self.get_logger().info(f"Goal canceled and no other goals in the queue => Brake mode")
+                        self.zuuu_hal.mode = ZuuuModes.BRAKE     
+                elif (not self.keep_control_on_arrival) and (self._goal_queue.qsize() == 0):
+                    # Changing the mode to BRAKE when the goal is reached and there are no other goals in the queue
+                    self.zuuu_hal.mode = ZuuuModes.BRAKE
+            else :
+                self.get_logger().info(f"Aborting goal")
+                goal_handle.abort()
+                ret = "abort"
+                self.nb_remaining_deletions -= 1
+                
             # Populate result message
             result = ZuuuGoto.Result()
             result.result.status = ret
-            self.get_logger().info(f"DEBUG PRINT returning result {result}")
 
-            self.current_goal_handle = None
             self.execution_ongoing.set()
             return result
         except Exception as e:
@@ -156,7 +154,6 @@ class ZuuuGotoActionServer(Node):
         self.zuuu_hal.theta_goal = goto_request.theta_goal
         # Setting zuuu_hal mode to GOTO
         if self.zuuu_hal.mode is not ZuuuModes.GOTO:
-            # TODO do this only if the queue is not empty
             self.get_logger().info(f"Switching from {self.zuuu_hal.mode} mode to {ZuuuModes.GOTO}.")
             self.zuuu_hal.mode = ZuuuModes.GOTO
             
@@ -179,7 +176,7 @@ class ZuuuGotoActionServer(Node):
                 t0_loop = time.time()
                 
                 # Check for cancellation
-                if goal_handle.is_cancel_requested or self.cancel_current_goal_toggle:
+                if goal_handle.is_cancel_requested :
                     self.set_goals_to_present_position()
                     goal_handle.canceled()
                     self.get_logger().info("Goal canceled")

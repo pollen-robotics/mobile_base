@@ -1081,9 +1081,8 @@ class ZuuuHAL(Node):
     def reset_odom_now(self):
         if self.mode is ZuuuModes.GOTO and self.goto_action_server.has_active_goals():
             # Resetting the odometry while a GoTo is ON might be dangerous. Stopping it to make sure:
-            self.get_logger().warning("Resetting the odometry while a GoTo is ON. Stopping the GoTo and removing all goals.")
-            self.goto_action_server.cancel_current_goal()
-            self.goto_action_server.cancel_all_future_goals()
+            self.get_logger().warning("Resetting the odometry while a GoTo is ON. Setting the mode to BRAKE for safety.")
+            self.mode = ZuuuModes.BRAKE
             
         if self.fake_hardware:
             # TODO this is not enough, there is an accumulation of error when resetting the odometry in Gazebo mode
@@ -1185,7 +1184,7 @@ class ZuuuHAL(Node):
             self.get_logger().warning("unknown control mode '{}'".format(self.control_mode))
 
     def stop_ongoing_services(self) -> None:
-        """Stops the GoTo and the SetSpeed services, if they were running"""
+        """Stops the SetSpeed service, if it was running"""
         self.speed_service_on = False
 
     def did_mode_change(self, dx, dy, dtheta, almost_zero=0.001):
