@@ -13,7 +13,6 @@ from rclpy.node import Node
 from typing import List
 
 
-
 class ZuuuGotoActionClient(Node):
     def __init__(self):
         super().__init__("mobile_base_goto_action_client")
@@ -47,9 +46,9 @@ class ZuuuGotoActionClient(Node):
         return_handle=False,
     ):
         goal_msg = ZuuuGoto.Goal()
-        
+
         request = goal_msg.request  # This is of type zuuu_interfaces/ZuuuGotoRequest
-        
+
         request.x_goal = x_goal
         request.y_goal = y_goal
         request.theta_goal = theta_goal
@@ -65,14 +64,10 @@ class ZuuuGotoActionClient(Node):
         request.angle_i = angle_i
         request.angle_d = angle_d
         request.angle_max_command = angle_max_command
-        
 
         self.get_logger().warning(f"Sending zuuu goto goal request: {request}")
-        
 
-        goal_handle = await self.goto_action_client.send_goal_async(
-            goal_msg, feedback_callback=feedback_callback
-        )
+        goal_handle = await self.goto_action_client.send_goal_async(goal_msg, feedback_callback=feedback_callback)
         self.get_logger().info("feedback_callback setuped")
 
         if not goal_handle.accepted:
@@ -118,7 +113,7 @@ async def blocking_demo(action_client):
         0.0,
         0.0,
         1.0,
-        feedback_callback=action_client.feedback_callback_default
+        feedback_callback=action_client.feedback_callback_default,
     )
     result, status = await action_client.send_goal(
         1.0,
@@ -136,7 +131,7 @@ async def blocking_demo(action_client):
         0.0,
         0.0,
         1.0,
-        feedback_callback=action_client.feedback_callback_default
+        feedback_callback=action_client.feedback_callback_default,
     )
 
     # An example on how to read result and status:
@@ -161,13 +156,12 @@ async def blocking_demo(action_client):
         0.0,
         0.0,
         1.0,
-        feedback_callback=action_client.feedback_callback_default
+        feedback_callback=action_client.feedback_callback_default,
     )
-    
+
     # Sleeping in place can lead to a better precision than the tolerances set
     await asyncio.sleep(1.0)
-    
-    
+
     result, status = await action_client.send_goal(
         0.0,
         0.0,
@@ -184,11 +178,11 @@ async def blocking_demo(action_client):
         0.0,
         0.0,
         1.0,
-        feedback_callback=action_client.feedback_callback_default
+        feedback_callback=action_client.feedback_callback_default,
     )
-    
+
     await asyncio.sleep(1.0)
-    
+
     result, status = await action_client.send_goal(
         1.0,
         1.0,
@@ -205,9 +199,9 @@ async def blocking_demo(action_client):
         0.0,
         0.0,
         1.0,
-        feedback_callback=action_client.feedback_callback_default
+        feedback_callback=action_client.feedback_callback_default,
     )
-    
+
     result, status = await action_client.send_goal(
         0.0,
         0.0,
@@ -224,10 +218,8 @@ async def blocking_demo(action_client):
         0.0,
         0.0,
         1.0,
-        feedback_callback=action_client.feedback_callback_default
+        feedback_callback=action_client.feedback_callback_default,
     )
-    
-
 
 
 async def non_blocking_demo(action_client, loop):
@@ -236,63 +228,63 @@ async def non_blocking_demo(action_client, loop):
     logger.info(f"$$$$$$ EXAMPLE 2: simultaneous async calls")
     my_task1 = loop.create_task(
         action_client.send_goal(
-        1.0,
-        1.0,
-        np.deg2rad(45),
-        0.05,
-        np.deg2rad(5),
-        10.0,
-        True,
-        5.0,
-        0.0,
-        0.0,
-        0.4,
-        5.0,
-        0.0,
-        0.0,
-        1.0,
-        feedback_callback=action_client.feedback_callback_default,
+            1.0,
+            1.0,
+            np.deg2rad(45),
+            0.05,
+            np.deg2rad(5),
+            10.0,
+            True,
+            5.0,
+            0.0,
+            0.0,
+            0.4,
+            5.0,
+            0.0,
+            0.0,
+            1.0,
+            feedback_callback=action_client.feedback_callback_default,
         )
     )
     my_task2 = loop.create_task(
         action_client.send_goal(
-        1.0,
-        2.0,
-        np.deg2rad(45),
-        0.05,
-        np.deg2rad(5),
-        10.0,
-        True,
-        5.0,
-        0.0,
-        0.0,
-        0.4,
-        5.0,
-        0.0,
-        0.0,
-        1.0,
-        feedback_callback=action_client.feedback_callback_default,
+            1.0,
+            2.0,
+            np.deg2rad(45),
+            0.05,
+            np.deg2rad(5),
+            10.0,
+            True,
+            5.0,
+            0.0,
+            0.0,
+            0.4,
+            5.0,
+            0.0,
+            0.0,
+            1.0,
+            feedback_callback=action_client.feedback_callback_default,
         )
     )
-    
+
     my_task3 = loop.create_task(
         action_client.send_goal(
-        1.0,
-        2.0,
-        np.deg2rad(180.0),
-        0.05,
-        np.deg2rad(5),
-        10.0,
-        True,
-        5.0,
-        0.0,
-        0.0,
-        0.4,
-        5.0,
-        0.0,
-        0.0,
-        1.0,
-        feedback_callback=action_client.feedback_callback_default,
+            1.0,
+            2.0,
+            np.deg2rad(180.0),
+            0.05,
+            np.deg2rad(5),
+            10.0,
+            True,
+            5.0,
+            0.0,
+            0.0,
+            0.4,
+            5.0,
+            0.0,
+            0.0,
+            1.0,
+            feedback_callback=action_client.feedback_callback_default,
         )
     )
 
@@ -310,42 +302,42 @@ async def non_blocking_demo(action_client, loop):
 
     my_task1 = loop.create_task(
         action_client.send_goal(
-        0.0,
-        0.0,
-        np.deg2rad(180.0),
-        0.05,
-        np.deg2rad(5),
-        10.0,
-        True,
-        5.0,
-        0.0,
-        0.0,
-        0.4,
-        5.0,
-        0.0,
-        0.0,
-        1.0,
-        feedback_callback=action_client.feedback_callback_default,
+            0.0,
+            0.0,
+            np.deg2rad(180.0),
+            0.05,
+            np.deg2rad(5),
+            10.0,
+            True,
+            5.0,
+            0.0,
+            0.0,
+            0.4,
+            5.0,
+            0.0,
+            0.0,
+            1.0,
+            feedback_callback=action_client.feedback_callback_default,
         )
     )
     my_task2 = loop.create_task(
         action_client.send_goal(
-        0.0,
-        0.0,
-        np.deg2rad(0.0),
-        0.05,
-        np.deg2rad(5),
-        10.0,
-        True,
-        5.0,
-        0.0,
-        0.0,
-        0.4,
-        5.0,
-        0.0,
-        0.0,
-        1.0,
-        feedback_callback=action_client.feedback_callback_default,
+            0.0,
+            0.0,
+            np.deg2rad(0.0),
+            0.05,
+            np.deg2rad(5),
+            10.0,
+            True,
+            5.0,
+            0.0,
+            0.0,
+            0.4,
+            5.0,
+            0.0,
+            0.0,
+            1.0,
+            feedback_callback=action_client.feedback_callback_default,
         )
     )
 
@@ -357,7 +349,6 @@ async def non_blocking_demo(action_client, loop):
     for task in finished:
         result, status = task.result()
         logger.info(f"Result: {result.result.status}")
-
 
 
 async def square_demo(action_client, max_speed, max_rotation_speed):
@@ -380,7 +371,7 @@ async def square_demo(action_client, max_speed, max_rotation_speed):
         0.0,
         0.0,
         max_rotation_speed,
-        feedback_callback=action_client.feedback_callback_default
+        feedback_callback=action_client.feedback_callback_default,
     )
     result, status = await action_client.send_goal(
         1.0,
@@ -398,7 +389,7 @@ async def square_demo(action_client, max_speed, max_rotation_speed):
         0.0,
         0.0,
         max_rotation_speed,
-        feedback_callback=action_client.feedback_callback_default
+        feedback_callback=action_client.feedback_callback_default,
     )
     result, status = await action_client.send_goal(
         0.0,
@@ -416,7 +407,7 @@ async def square_demo(action_client, max_speed, max_rotation_speed):
         0.0,
         0.0,
         max_rotation_speed,
-        feedback_callback=action_client.feedback_callback_default
+        feedback_callback=action_client.feedback_callback_default,
     )
     result, status = await action_client.send_goal(
         0.0,
@@ -434,9 +425,8 @@ async def square_demo(action_client, max_speed, max_rotation_speed):
         0.0,
         0.0,
         max_rotation_speed,
-        feedback_callback=action_client.feedback_callback_default
+        feedback_callback=action_client.feedback_callback_default,
     )
-    
 
 
 async def cancel_demo(action_client, loop):
@@ -460,9 +450,9 @@ async def cancel_demo(action_client, loop):
         0.0,
         1.0,
         return_handle=True,
-        feedback_callback=action_client.feedback_callback_default
+        feedback_callback=action_client.feedback_callback_default,
     )
-    
+
     await asyncio.sleep(1.0)
     await goal_handle.cancel_goal_async()
     logger.info(f"Goal canceled!")
@@ -488,6 +478,7 @@ async def cancel_demo(action_client, loop):
         return_handle=False,
     )
 
+
 async def run_demo(args, loop):
     rclpy.init(args=args)
 
@@ -511,7 +502,6 @@ async def run_demo(args, loop):
     await square_demo(action_client, 0.2, 0.5)
     await square_demo(action_client, 0.8, 2.0)
 
-
     # cancel spinning task
     spin_task.cancel()
     try:
@@ -527,7 +517,7 @@ def main(args=None):
     # done, _pending = loop.run_until_complete(run_demo(args, loop=loop))
 
     # for task in done:
-    #     task.result() 
+    #     task.result()
 
 
 if __name__ == "__main__":

@@ -62,7 +62,6 @@ from zuuu_hal.utils import PID, angle_diff, sign, ZuuuModes, ZuuuControlModes
 from zuuu_hal.zuuu_goto_action_server import ZuuuGotoActionServer
 
 
-
 class MobileBase:
     """Mobile base representation and the interface with low level controllers"""
 
@@ -103,12 +102,10 @@ class MobileBase:
             self.right_wheel_measurements,
             self.back_wheel_measurements,
         ) = (init_measurements_value, init_measurements_value, init_measurements_value)
-                
+
         if not self.fake_hardware:
             self._multi_vesc = MultiVESC(serial_port=serial_port, vescs_params=params)
             self.left_wheel, self.right_wheel, self.back_wheel = self._multi_vesc.controllers
-
-        
 
     def read_all_measurements(self) -> None:
         """Reads all the measurements for the left, right and back wheels"""
@@ -138,19 +135,23 @@ class ZuuuHAL(Node):
         """
         super().__init__("zuuu_hal")
         self.get_logger().info("Starting zuuu_hal!")
-        
+
         self.goto_action_server = ZuuuGotoActionServer(self, shared_callback_group)
-        
-        self.declare_parameter('fake_hardware', False)
-        self.fake_hardware = self.get_parameter('fake_hardware').value
-        
+
+        self.declare_parameter("fake_hardware", False)
+        self.fake_hardware = self.get_parameter("fake_hardware").value
+
         if self.fake_hardware:
-            self.get_logger().info("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ Running zuuu_hal in fake hardware mode\n$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
+            self.get_logger().info(
+                "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ Running zuuu_hal in fake hardware mode\n$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
+            )
             # self.omnibase = MobileBase(left_wheel_id=None, right_wheel_id=None, back_wheel_id=None, fake_hardware=True)
         else:
             # self.get_logger().info("Running zuuu_hal on physical hardware")
-            self.get_logger().info("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ Running zuuu_hal on physical hardware\n$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
-            
+            self.get_logger().info(
+                "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ Running zuuu_hal on physical hardware\n$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
+            )
+
         reachy_config = ReachyConfig()
         self.zuuu_version = reachy_config.mobile_base_config["version_hard"]
         self.get_logger().info(f"zuuu version: {self.zuuu_version}")
@@ -162,12 +163,17 @@ class ZuuuHAL(Node):
             self.get_logger().error(traceback.format_exc())
             raise RuntimeError(msg)
         if float_model < 1.0:
-            self.omnibase = MobileBase(left_wheel_id=24, right_wheel_id=72, back_wheel_id=None, fake_hardware=self.fake_hardware)
+            self.omnibase = MobileBase(
+                left_wheel_id=24, right_wheel_id=72, back_wheel_id=None, fake_hardware=self.fake_hardware
+            )
         elif float_model < 1.2:
-            self.omnibase = MobileBase(left_wheel_id=24, right_wheel_id=None, back_wheel_id=116, fake_hardware=self.fake_hardware)
+            self.omnibase = MobileBase(
+                left_wheel_id=24, right_wheel_id=None, back_wheel_id=116, fake_hardware=self.fake_hardware
+            )
         else:
-            self.omnibase = MobileBase(left_wheel_id=None, right_wheel_id=72, back_wheel_id=116, fake_hardware=self.fake_hardware)
-        
+            self.omnibase = MobileBase(
+                left_wheel_id=None, right_wheel_id=72, back_wheel_id=116, fake_hardware=self.fake_hardware
+            )
 
         self.get_logger().info("Reading Zuuu's sensors once...")
         self.read_measurements()
@@ -288,7 +294,7 @@ class ZuuuHAL(Node):
             fake_hardware=self.fake_hardware,
         )
         self.cv_bridge = CvBridge()
-        
+
         """
         PID values tunned on a Reachy 2 15/10/2024
         The idea behind this tuning is that the proportional gain (P) is set quite high, 
@@ -297,11 +303,11 @@ class ZuuuHAL(Node):
 
         We also tested a full PID tuning (instead of just P), but the promise of "eliminating the steady-state error" 
         doesn’t work well with the small "steps" produced by the holonomic wheel.
-        """        
+        """
         # "No over-shoot Ziegler Nichols"
         # self.theta_pid = PID(p=3.2, i=14.2, d=0.475,
         #                      max_command=4.0, max_i_contribution=1.0)
-        
+
         self.distance_pid_cmd_goto = PID(p=5.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=0.2)
         self.angle_pid_cmd_goto = PID(p=5.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=0.5)
         # TODO test IRL if this is a good idea. Not using it for now
@@ -309,7 +315,6 @@ class ZuuuHAL(Node):
         # self.slow_angle_pid_cmd_goto = PID(p=1.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=0.5)
         self.distance_pid = PID(p=5.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=0.2)
         self.angle_pid = PID(p=5.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=0.5)
-
 
         self.max_wheel_speed = self.pwm_to_wheel_rot_speed(self.max_duty_cyle)
         self.get_logger().info(
@@ -349,8 +354,8 @@ class ZuuuHAL(Node):
         self.pub_mobile_base_state = self.create_publisher(MobileBaseState, "mobile_base_state", 2)
 
         self.pub_odom = self.create_publisher(Odometry, "odom_zuuu", 2)
-        
-        self.pub_fake_vel = self.create_publisher(Twist, "cmd_vel_gazebo", 10)        
+
+        self.pub_fake_vel = self.create_publisher(Twist, "cmd_vel_gazebo", 10)
 
         self.mode_service = self.create_service(SetZuuuMode, "SetZuuuMode", self.handle_zuuu_mode)
 
@@ -489,7 +494,9 @@ class ZuuuHAL(Node):
                 )
             elif request.mode == ZuuuModes.GOTO.name:
                 self.get_logger().info(
-                    "'{}' should not be changed by hand, use the ZuuuGotoActionServer action server instead".format(request.mode)
+                    "'{}' should not be changed by hand, use the ZuuuGotoActionServer action server instead".format(
+                        request.mode
+                    )
                 )
             else:
                 # Changing the mode is a way to prematurely end an on going task requested through a service
@@ -637,18 +644,17 @@ class ZuuuHAL(Node):
             msg = "Battery voltage critically LOW ({}V). Emergency shutdown! Warning threshold: {:.1f}V, "
             "stop threshold: {:.1f}V".format(voltage, warn_voltage, min_voltage)
             self.emergency_shutdown(msg)
-            
+
         else:
             self.get_logger().warning("Battery voltage OK ({}V)".format(voltage))
 
-    
     def emergency_shutdown(self, msg: str) -> None:
         """
         Sets the PWM of the three wheel motors to 0V (i.e., brakes the system) and raises a RuntimeError.
-        
+
         """
         self.get_logger().warn(f"Emergency shutdown initiated in zuuu_hal: {msg}")
-        
+
         if self.already_shutdown:
             return
 
@@ -664,11 +670,9 @@ class ZuuuHAL(Node):
         finally:
             self.already_shutdown = True
 
-
         time.sleep(0.1)
-        
-        raise RuntimeError(msg)
 
+        raise RuntimeError(msg)
 
     def cmd_vel_callback(self, msg: Twist) -> None:
         """Handles the callback on the /cmd_vel topic"""
@@ -716,19 +720,18 @@ class ZuuuHAL(Node):
         # Publishing the safety image
         lidar_img = self.lidar_safety.create_safety_img(filtered_scan)
         self.lidar_image_pub.publish(self.cv_bridge.cv2_to_imgmsg(lidar_img))
-        
+
     def gazebo_odom_callback(self, msg: Odometry) -> None:
         """Callback method on the /odom topic used in Gazebo mode"""
         self.vx_gazebo = msg.twist.twist.linear.x
         self.vy_gazebo = msg.twist.twist.linear.y
         self.vtheta_gazebo = msg.twist.twist.angular.z
-        
+
         # reading the odometry from the gazebo plugin
         self.x_odom_gazebo = msg.pose.pose.position.x
         self.y_odom_gazebo = msg.pose.pose.position.y
         q = msg.pose.pose.orientation
         _, _, self.theta_odom_gazebo = tf_transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
-        
 
     def wheel_rot_speed_to_pwm_no_friction(self, rot: float) -> float:
         """Uses a simple linear model to map the expected rotational speed of the wheel to a constant PWM
@@ -838,17 +841,12 @@ class ZuuuHAL(Node):
 
     def filter_speed_goals(self, x_vel, y_vel, theta_vel):
         """Applies a smoothing filter"""
-        self.x_vel_goal_filtered = (x_vel + self.smoothing_factor * self.x_vel_goal_filtered) / (
-            1 + self.smoothing_factor
-        )
-        self.y_vel_goal_filtered = (y_vel + self.smoothing_factor * self.y_vel_goal_filtered) / (
-            1 + self.smoothing_factor
-        )
+        self.x_vel_goal_filtered = (x_vel + self.smoothing_factor * self.x_vel_goal_filtered) / (1 + self.smoothing_factor)
+        self.y_vel_goal_filtered = (y_vel + self.smoothing_factor * self.y_vel_goal_filtered) / (1 + self.smoothing_factor)
         self.theta_vel_goal_filtered = (theta_vel + self.smoothing_factor * self.theta_vel_goal_filtered) / (
             1 + self.smoothing_factor
         )
         return self.x_vel_goal_filtered, self.y_vel_goal_filtered, self.theta_vel_goal_filtered
-
 
     def format_measurements(self, measurements) -> str:
         """Text formatting for the low level controller measurements"""
@@ -908,7 +906,7 @@ class ZuuuHAL(Node):
             else:
                 rpm_back.data = float(self.omnibase.back_wheel_measurements.rpm)
             self.pub_back_wheel_rpm.publish(rpm_back)
-            
+
         if self.omnibase.right_wheel_measurements is not None:
             rpm_right = Float32()
             if self.fake_hardware:
@@ -924,7 +922,6 @@ class ZuuuHAL(Node):
             else:
                 rpm_left.data = float(self.omnibase.left_wheel_measurements.rpm)
             self.pub_left_wheel_rpm.publish(rpm_left)
-                    
 
     def update_wheel_speeds(self) -> None:
         """Uses the latest mesure of wheel rotational speed to update the smoothed internal estimation of the wheel
@@ -997,7 +994,7 @@ class ZuuuHAL(Node):
         t.transform.rotation.w = q[3]
 
         self.br.sendTransform(t)
-        
+
     def publish_fake_robot_speed(self, x_vel, y_vel, theta_vel) -> None:
         """Publishes the current robot speed (Twist type)"""
         twist = Twist()
@@ -1005,7 +1002,7 @@ class ZuuuHAL(Node):
         twist.linear.y = float(y_vel)
         twist.angular.z = float(theta_vel)
         # self.get_logger().info(f"Publishing fake robot speed: x={x_vel:.2f}m/s, y={y_vel:.2f}m/s, theta={theta_vel:.2f}rad/s")
-        
+
         self.pub_fake_vel.publish(twist)
 
     def odom_tick(self) -> None:
@@ -1031,7 +1028,7 @@ class ZuuuHAL(Node):
                 self.omnibase.right_wheel_rpm * pole_factor,
                 self.omnibase.back_wheel_rpm * pole_factor,
             )
-             # Applying the small displacement in the world-fixed odom frame (simple 2D rotation)
+            # Applying the small displacement in the world-fixed odom frame (simple 2D rotation)
             dx = (x_vel * math.cos(self.theta_odom) - y_vel * math.sin(self.theta_odom)) * dt_seconds
             dy = (x_vel * math.sin(self.theta_odom) + y_vel * math.cos(self.theta_odom)) * dt_seconds
             dtheta = theta_vel * dt_seconds
@@ -1048,7 +1045,7 @@ class ZuuuHAL(Node):
             self.vx = self.vx_gazebo
             self.vy = self.vy_gazebo
             self.vtheta = self.vtheta_gazebo
-            
+
             # This is the small displacement in the world-fixed Gazebo odom frame (that never resets)
             dx_gazebo = self.x_odom_gazebo - self.x_odom_gazebo_old
             dy_gazebo = self.y_odom_gazebo - self.y_odom_gazebo_old
@@ -1056,25 +1053,25 @@ class ZuuuHAL(Node):
             dx = dx_gazebo * math.cos(self.theta_zuuu_vs_gazebo) - dy_gazebo * math.sin(self.theta_zuuu_vs_gazebo)
             dy = dx_gazebo * math.sin(self.theta_zuuu_vs_gazebo) + dy_gazebo * math.cos(self.theta_zuuu_vs_gazebo)
             dtheta = angle_diff(self.theta_odom_gazebo, self.theta_odom_gazebo_old)
-            
+
             self.x_odom += dx
             self.y_odom += dy
             self.theta_odom += dtheta
-            
+
             # self.x_odom = self.x_odom_gazebo
             # self.y_odom = self.y_odom_gazebo
             # self.theta_odom = self.theta_odom_gazebo
-            
+
             self.x_odom_gazebo_old = self.x_odom_gazebo
             self.y_odom_gazebo_old = self.y_odom_gazebo
             self.theta_odom_gazebo_old = self.theta_odom_gazebo
-        
+
         if self.reset_odom:
             # Resetting asynchronously to prevent race conditions.
             # dx, dy and dteta remain correct even on the reset tick
             self.reset_odom = False
             self.reset_odom_now()
-        
+
         self.publish_odometry_and_tf()
         # self.get_logger().info(f"XXX Odom: x={self.x_odom:.2f}m, y={self.y_odom:.2f}m, theta={self.theta_odom:.2f}rad")
 
@@ -1083,11 +1080,11 @@ class ZuuuHAL(Node):
             # Resetting the odometry while a GoTo is ON might be dangerous. Stopping it to make sure:
             self.get_logger().warning("Resetting the odometry while a GoTo is ON. Setting the mode to BRAKE for safety.")
             self.mode = ZuuuModes.BRAKE
-            
+
         if self.fake_hardware:
             # TODO this is not enough, there is an accumulation of error when resetting the odometry in Gazebo mode
-            self.theta_zuuu_vs_gazebo-=self.theta_odom
-            
+            self.theta_zuuu_vs_gazebo -= self.theta_odom
+
         self.x_odom = 0.0
         self.y_odom = 0.0
         self.theta_odom = 0.0
@@ -1358,7 +1355,7 @@ class ZuuuHAL(Node):
             self.x_goal, self.y_goal = self.calculate_xy_goal(intensity)
             # self.get_logger().info(
             #     f"self.x_goal={self.x_goal:.2f}, self.y_goal={self.y_goal:.2f}, self.theta_goal={self.theta_goal:.2f}")
-    
+
     def cmd_vel_tick(self):
         t = time.time()
         # If too much time without an order, the speeds are smoothed back to 0 for safety.
@@ -1367,17 +1364,16 @@ class ZuuuHAL(Node):
             self.y_vel_goal = self.cmd_vel.linear.y
             self.theta_vel_goal = self.cmd_vel.angular.z
         else:
-            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal =  0.0, 0.0, 0.0
-    
-    def speed_mode_tick(self)-> None :
-        """Tick function for the speed mode. Will only set the speeds to 0 if the duration is over.
-        """
+            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = 0.0, 0.0, 0.0
+
+    def speed_mode_tick(self) -> None:
+        """Tick function for the speed mode. Will only set the speeds to 0 if the duration is over."""
         if self.speed_service_deadline < time.time():
             if self.speed_service_on:
                 self.get_logger().info("End of set speed duration, setting speeds to 0")
             self.speed_service_on = False
-            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal =  0.0, 0.0, 0.0
-    
+            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = 0.0, 0.0, 0.0
+
     def goto_tick(self, shortest_angle=False, distance_pid=None, angle_pid=None):
         """Tick function for the goto mode. Will calculate the robot's speed to reach a goal pose in the odometry frame.
         This function uses a PID controlle for translation and a PID controller for rotation.
@@ -1386,15 +1382,15 @@ class ZuuuHAL(Node):
             distance_pid = self.distance_pid
         else:
             distance_pid = distance_pid
-            
+
         if angle_pid is None:
             angle_pid = self.angle_pid
         else:
             angle_pid = angle_pid
-            
+
         dx = self.x_odom - self.x_goal
         dy = self.y_odom - self.y_goal
-        distance_error = math.sqrt(dx ** 2 + dy ** 2)
+        distance_error = math.sqrt(dx**2 + dy**2)
         angle_error = self.theta_odom - self.theta_goal
 
         dist_command = distance_pid.tick(distance_error)
@@ -1404,28 +1400,28 @@ class ZuuuHAL(Node):
         else:
             # With this version the robot will rotate towards the goal with the shortest path
             angle_command = angle_pid.tick(angle_error, is_angle=True)
-        
+
         if distance_error == 0:
             x_command = 0
             y_command = 0
-        else :
+        else:
             # The vector (dx, dy) is the vector from the robot to the goal in the odom frame
             # Transforming that vector from the world-fixed odom frame to the robot-fixed frame
             x_command = dx * math.cos(-self.theta_odom) - dy * math.sin(-self.theta_odom)
             y_command = dx * math.sin(-self.theta_odom) + dy * math.cos(-self.theta_odom)
-            
+
             # Normalizing. The (x_command, y_command) vector is now a unit vector pointing towards the goal in the robot frame
-            x_command = x_command / distance_error 
+            x_command = x_command / distance_error
             y_command = y_command / distance_error
             # Scaling the command vector by the PID output
             x_command *= dist_command
             y_command *= dist_command
-        
+
         # No transformations to do with the angle_command as the Z odom axis is coolinear with the Z robot axis
         self.x_vel_goal = x_command
         self.y_vel_goal = y_command
-        self.theta_vel_goal = angle_command 
-    
+        self.theta_vel_goal = angle_command
+
     def cmd_goto_tick(self):
         t = time.time()
         # If too much time without an order, the speeds are smoothed back to 0 for safety.
@@ -1437,9 +1433,8 @@ class ZuuuHAL(Node):
             self.fake_vel_goals_to_goto_goals(self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal)
             self.goto_tick(shortest_angle=False, distance_pid=self.distance_pid_cmd_goto, angle_pid=self.angle_pid_cmd_goto)
         else:
-            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal =  0.0, 0.0, 0.0
-        
-            
+            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = 0.0, 0.0, 0.0
+
     def handle_stop_modes(self, mode):
         self.calculated_wheel_speeds = [0.0, 0.0, 0.0]
         # To avoid smoothing shenanigans if we go back to a speed mode
@@ -1453,7 +1448,7 @@ class ZuuuHAL(Node):
                 self.omnibase.right_wheel.set_duty_cycle(0)
             else:
                 self.publish_fake_robot_speed(0, 0, 0)
-            
+
         elif mode is ZuuuModes.FREE_WHEEL:
             if not self.fake_hardware:
                 self.omnibase.back_wheel.set_current(0)
@@ -1464,7 +1459,7 @@ class ZuuuHAL(Node):
         else:
             msg = "Mode requested: {} => calling emergency_shutdown".format(mode)
             self.emergency_shutdown(msg)
-            
+
     def control_tick(self):
         if self.mode in ZuuuModes.speed_modes():
             # Speed modes will perform different types of calculation, but will always output speeds in the robot's frame
@@ -1481,7 +1476,7 @@ class ZuuuHAL(Node):
         else:
             # Stop modes directly send stopping commands to the wheels
             self.handle_stop_modes(self.mode)
-            
+
     def process_velocity_goals_and_send_wheel_commands(self):
         """Processes the robot speed goals and sends the calculated wheel speeds to the wheel controllers.
         The robot speed goals are filtered, safety checked and then transformed into wheel speeds using the IK.
@@ -1498,9 +1493,8 @@ class ZuuuHAL(Node):
             self.publish_fake_robot_speed(x_vel, y_vel, theta_vel)
         else:
             # Sending the commands to the physical wheels
-            self.send_wheel_commands(self.calculated_wheel_speeds)  
-            
-                
+            self.send_wheel_commands(self.calculated_wheel_speeds)
+
     def measurements_tick(self, verbose: bool = False):
         if not self.fake_hardware:
             # Reading the measurements (this is what takes most of the time, ~9ms).
@@ -1509,24 +1503,20 @@ class ZuuuHAL(Node):
             self.publish_wheel_speeds()
             if verbose:
                 self.print_all_measurements()
-        
+
         self.publish_wheel_speeds()
         self.publish_mobile_base_state()
-        
-        
-            
+
     def check_for_lidar_scan(self, t):
         if (not self.scan_is_read) or ((t - self.scan_t0) > self.scan_timeout):
             # If too much time without a LIDAR scan, the speeds are set to 0 for safety.
-            self.get_logger().warning(
-                "waiting for a LIDAR scan to be read. Discarding all commands..."
-            )
+            self.get_logger().warning("waiting for a LIDAR scan to be read. Discarding all commands...")
             wheel_speeds = self.ik_vel(0.0, 0.0, 0.0)
             self.send_wheel_commands(wheel_speeds)
             time.sleep(0.5)
             return False
         return True
-    
+
     def print_loop_freq(self, t):
         dt = time.time() - t
         if dt == 0:
@@ -1546,25 +1536,23 @@ class ZuuuHAL(Node):
             self.get_logger().info("=> Zuuu HAL up and running! **")
 
         self.control_tick()
-        
+
         self.measurements_tick(verbose)
-        
+
         self.odom_tick()
-        
+
         if verbose:
             self.print_loop_freq(t)
 
-        
 
 def main(args=None) -> None:
     """Run ZuuuHAL main loop"""
     try:
-    
         rclpy.init(args=args)
-        
-        
-        callback_group = MutuallyExclusiveCallbackGroup() # ReentrantCallbackGroup() brings bad memories, avoiding it if possible
-        
+
+        callback_group = (
+            MutuallyExclusiveCallbackGroup()
+        )  # ReentrantCallbackGroup() brings bad memories, avoiding it if possible
 
         zuuu_hal = ZuuuHAL(callback_group)
 
@@ -1581,11 +1569,10 @@ def main(args=None) -> None:
     except KeyboardInterrupt:
         # rclpy.logging._root_logger.error(traceback.format_exc())
         rclpy.logging._root_logger.error("KeyboardInterrupt in zuuu_hal")
-    finally:        
+    finally:
         zuuu_hal.emergency_shutdown("Default zuuu_hal shutdown")
         rclpy.shutdown()
         executor_thread.join()
-    
 
 
 if __name__ == "__main__":

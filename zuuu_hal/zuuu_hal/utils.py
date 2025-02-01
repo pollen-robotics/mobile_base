@@ -16,7 +16,8 @@ def sign(x: float) -> int:
         return 1
     else:
         return -1
-    
+
+
 class ZuuuModes(Enum):
     """
     Zuuu drive modes
@@ -28,6 +29,7 @@ class ZuuuModes(Enum):
     EMERGENCY_STOP =  Calls the emergency_shutdown method
     CMD_GOTO = Behaves like CMD_VEL but uses the odometry to correct the commands
     """
+
     CMD_VEL = 1
     BRAKE = 2
     FREE_WHEEL = 3
@@ -75,7 +77,7 @@ class PID:
         self.i = i
         self.d = d
         self.max_command = max_command
-        
+
         self.max_i_contribution = max_i_contribution
         self.goal_value = 0.0
         self.current_value = 0.0

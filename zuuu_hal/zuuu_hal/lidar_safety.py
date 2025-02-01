@@ -11,6 +11,7 @@ from sensor_msgs.msg import LaserScan
 
 from zuuu_hal.utils import angle_diff
 
+
 class LidarSafety:
     def __init__(
         self,
@@ -83,10 +84,10 @@ class LidarSafety:
         for i, r in enumerate(msg.ranges):
             if math.isinf(r):
                 continue
-            angle = msg.angle_min + angle_min_offset+ i * msg.angle_increment
+            angle = msg.angle_min + angle_min_offset + i * msg.angle_increment
             ranges.append(0.0)
             intensities.append(0.0)
-            
+
             if r < 0.01:
                 # Code value for "no detection". e.g. the lidar filter that filters self collisions
                 # Adding an unsafe angle to avoid going fast where we're blind

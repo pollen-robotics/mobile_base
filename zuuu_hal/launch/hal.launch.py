@@ -7,14 +7,11 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-def generate_launch_description():
-    config = os.path.join(
-        get_package_share_directory("zuuu_hal"), "config", "params.yaml"
-    )
 
-    rplidar_launch_dir = os.path.join(
-        get_package_share_directory("rplidar_ros2"), "launch"
-    )
+def generate_launch_description():
+    config = os.path.join(get_package_share_directory("zuuu_hal"), "config", "params.yaml")
+
+    rplidar_launch_dir = os.path.join(get_package_share_directory("rplidar_ros2"), "launch")
 
     # Launch arguments
     arguments = [
@@ -37,9 +34,7 @@ def generate_launch_description():
     # Conditionally include the LIDAR launch file only if not in simulation mode
     launches = [
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(rplidar_launch_dir, "zuuu_rplidar_s2_launch.py")
-            ),
+            PythonLaunchDescriptionSource(os.path.join(rplidar_launch_dir, "zuuu_rplidar_s2_launch.py")),
             condition=UnlessCondition(fake_hardware),
         ),
     ]
