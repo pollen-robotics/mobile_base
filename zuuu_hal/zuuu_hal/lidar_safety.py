@@ -182,7 +182,7 @@ class LidarSafety:
         beta = abs(math.atan2(self.robot_collision_radius, dist))
         return [angle, beta]
 
-    def create_safety_img(self, msg: LaserScan, range_max: float = 3.0) -> None:
+    def create_safety_img(self, msg: LaserScan, range_max: float = 3.0) -> np.ndarray:
         if msg is None:
             return 0, 0
 

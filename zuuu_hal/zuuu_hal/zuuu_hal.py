@@ -15,7 +15,7 @@ import traceback
 from collections import deque
 from csv import writer
 from subprocess import check_output
-from typing import List, Deque, Optional, Any
+from typing import List, Deque, Optional, Any, Tuple
 
 import numpy as np
 import rclpy
@@ -83,12 +83,12 @@ class MobileBase:
         self.half_poles: float = 15.0
 
         # Wheel RPM values.
-        self.left_wheel_rpm: int = 0
-        self.right_wheel_rpm: int = 0
-        self.back_wheel_rpm: int = 0
-        self.left_wheel_avg_rpm: int = 0
-        self.right_wheel_avg_rpm: int = 0
-        self.back_wheel_avg_rpm: int = 0
+        self.left_wheel_rpm: float = 0.0
+        self.right_wheel_rpm: float = 0.0
+        self.back_wheel_rpm: float = 0.0
+        self.left_wheel_avg_rpm: float = 0.0
+        self.right_wheel_avg_rpm: float = 0.0
+        self.back_wheel_avg_rpm: float = 0.0
 
         # Deques to hold recent RPM measurements.
         self.left_wheel_rpm_deque: Deque[float] = deque(maxlen=10)
@@ -499,19 +499,17 @@ class ZuuuHAL(Node):
 
     def handle_zuuu_mode(self, request: SetZuuuMode.Request, response: SetZuuuMode.Response) -> SetZuuuMode.Response:
         """Handle SetZuuuMode service request"""
-        self.get_logger().info("Requested mode change to :'{}'".format(request.mode))
+        self.get_logger().info(f"Requested mode change to :'{request.mode}'")
         response.success = False
 
         if request.mode in [m.name for m in ZuuuModes]:
             if request.mode == ZuuuModes.SPEED.name:
                 self.get_logger().info(
-                    "'{}' should not be changed by hand, use the SetSpeed service instead".format(request.mode)
+                    f"'{request.mode}' should not be changed by hand, use the SetSpeed service instead"
                 )
             elif request.mode == ZuuuModes.GOTO.name:
                 self.get_logger().info(
-                    "'{}' should not be changed by hand, use the ZuuuGotoActionServer action server instead".format(
-                        request.mode
-                    )
+                    f"'{request.mode}' should not be changed by hand, use the ZuuuGotoActionServer action server instead"
                 )
             else:
                 # Changing the mode is a way to prematurely end an on going task requested through a service
@@ -652,16 +650,14 @@ class ZuuuHAL(Node):
 
         if min_voltage < voltage < warn_voltage:
             self.get_logger().warning(
-                "Battery voltage LOW ({}V). Consider recharging. Warning threshold: {:.1f}V, "
-                "stop threshold: {:.1f}V".format(voltage, warn_voltage, min_voltage)
+                f"Battery voltage LOW ({voltage}V). Consider recharging. Warning threshold: {warn_voltage:.1f}V, stop threshold: {min_voltage:.1f}V"
             )
         elif voltage < min_voltage:
-            msg = "Battery voltage critically LOW ({}V). Emergency shutdown! Warning threshold: {:.1f}V, "
-            "stop threshold: {:.1f}V".format(voltage, warn_voltage, min_voltage)
+            msg = f"Battery voltage critically LOW ({voltage}V). Emergency shutdown! Warning threshold: {min_voltage:.1f}V, "
             self.emergency_shutdown(msg)
 
         else:
-            self.get_logger().warning("Battery voltage OK ({}V)".format(voltage))
+            self.get_logger().warning(f"Battery voltage OK ({voltage}V)")
 
     def emergency_shutdown(self, msg: str) -> None:
         """
@@ -834,7 +830,7 @@ class ZuuuHAL(Node):
 
         return [wheel_rot_speed_back, wheel_rot_speed_right, wheel_rot_speed_left]
 
-    def dk_vel(self, rot_l: float, rot_r: float, rot_b: float) -> float:
+    def dk_vel(self, rot_l: float, rot_r: float, rot_b: float) -> Tuple[float, float, float]:
         """Takes the 3 rotational speeds (in rpm) of the 3 wheels and outputs the x linear speed (m/s),
         y linear speed (m/s) and rotational speed (rad/s) in the robot egocentric frame
 
@@ -852,7 +848,7 @@ class ZuuuHAL(Node):
         y_vel = -speed_b * 2 / 3.0 + speed_l * 1 / 3.0 + speed_r * 1 / 3.0
         theta_vel = (speed_l + speed_r + speed_b) / (3 * self.omnibase.wheel_to_center)
 
-        return [x_vel, y_vel, theta_vel]
+        return x_vel, y_vel, theta_vel
 
     def filter_speed_goals(self, x_vel, y_vel, theta_vel):
         """Applies a smoothing filter"""
@@ -868,25 +864,25 @@ class ZuuuHAL(Node):
         if measurements is None:
             return "None"
         to_print = ""
-        to_print += "temp_fet:{}\n".format(measurements.temp_fet)
-        to_print += "temp_motor:{}\n".format(measurements.temp_motor)
-        to_print += "avg_motor_current:{}\n".format(measurements.avg_motor_current)
-        to_print += "avg_input_current:{}\n".format(measurements.avg_input_current)
-        to_print += "avg_id:{}\n".format(measurements.avg_id)
-        to_print += "avg_iq:{}\n".format(measurements.avg_iq)
-        to_print += "duty_cycle_now:{}\n".format(measurements.duty_cycle_now)
-        to_print += "rpm:{}\n".format(measurements.rpm)
-        to_print += "v_in:{}\n".format(measurements.v_in)
-        to_print += "amp_hours:{}\n".format(measurements.amp_hours)
-        to_print += "amp_hours_charged:{}\n".format(measurements.amp_hours_charged)
-        to_print += "watt_hours:{}\n".format(measurements.watt_hours)
-        to_print += "watt_hours_charged:{}\n".format(measurements.watt_hours_charged)
-        to_print += "tachometer:{}\n".format(measurements.tachometer)
-        to_print += "tachometer_abs:{}\n".format(measurements.tachometer_abs)
-        to_print += "mc_fault_code:{}\n".format(measurements.mc_fault_code)
-        to_print += "pid_pos_now:{}\n".format(measurements.pid_pos_now)
-        to_print += "app_controller_id:{}\n".format(measurements.app_controller_id)
-        to_print += "time_ms:{}\n".format(measurements.time_ms)
+        to_print += f"temp_fet:{measurements.temp_fet}\n"
+        to_print += f"temp_motor:{measurements.temp_motor}\n"
+        to_print += f"avg_motor_current:{measurements.avg_motor_current}\n"
+        to_print += f"avg_input_current:{measurements.avg_input_current}\n"
+        to_print += f"avg_id:{measurements.avg_id}\n"
+        to_print += f"avg_iq:{measurements.avg_iq}\n"
+        to_print += f"duty_cycle_now:{measurements.duty_cycle_now}\n"
+        to_print += f"rpm:{measurements.rpm}\n"
+        to_print += f"v_in:{measurements.v_in}\n"
+        to_print += f"amp_hours:{measurements.amp_hours}\n"
+        to_print += f"amp_hours_charged:{measurements.amp_hours_charged}\n"
+        to_print += f"watt_hours:{measurements.watt_hours}\n"
+        to_print += f"watt_hours_charged:{measurements.watt_hours_charged}\n"
+        to_print += f"tachometer:{measurements.tachometer}\n"
+        to_print += f"tachometer_abs:{measurements.tachometer_abs}\n"
+        to_print += f"mc_fault_code:{measurements.mc_fault_code}\n"
+        to_print += f"pid_pos_now:{measurements.pid_pos_now}\n"
+        to_print += f"app_controller_id:{measurements.app_controller_id}\n"
+        to_print += f"time_ms:{measurements.time_ms}\n"
         return to_print
 
     def print_all_measurements(self) -> None:
@@ -897,19 +893,9 @@ class ZuuuHAL(Node):
         to_print += self.format_measurements(self.omnibase.left_wheel_measurements)
         to_print += "\n\n*** right_wheel:\n"
         to_print += self.format_measurements(self.omnibase.right_wheel_measurements)
-        to_print += "\n\n Fails ('Nones') left:{}, right:{}, back:{}".format(
-            self.omnibase.left_wheel_nones,
-            self.omnibase.right_wheel_nones,
-            self.omnibase.back_wheel_nones,
-        )
-        to_print += "\n\n AVG RPM left:{:.2f}, right:{:.2f}, back:{:.2f}".format(
-            self.omnibase.left_wheel_avg_rpm / self.omnibase.half_poles,
-            self.omnibase.right_wheel_avg_rpm / self.omnibase.half_poles,
-            self.omnibase.back_wheel_avg_rpm / self.omnibase.half_poles,
-        )
-
-        self.get_logger().info("{}".format(to_print))
-        # 20 tours en 35s, avg_rpm ~=34
+        to_print += f"\n\n Fails ('Nones') left:{self.omnibase.left_wheel_nones}, right:{self.omnibase.right_wheel_nones}, back:{self.omnibase.back_wheel_nones}"
+        to_print += f"\n\n AVG RPM left:{self.omnibase.left_wheel_avg_rpm / self.omnibase.half_poles:.2f}, right:{self.omnibase.right_wheel_avg_rpm / self.omnibase.half_poles:.2f}, back:{self.omnibase.back_wheel_avg_rpm / self.omnibase.half_poles:.2f}"
+        self.get_logger().info(f"{to_print}")
 
     def publish_wheel_speeds(self) -> None:
         """Publishes the most recent measures of rotational speed for each of the 3 wheels on 3 separate topics."""
@@ -1193,7 +1179,7 @@ class ZuuuHAL(Node):
             self.omnibase.left_wheel.set_rpm(int(self.omnibase.half_poles * wheel_speeds[2] * 30 / math.pi))
             self.omnibase.right_wheel.set_rpm(int(self.omnibase.half_poles * wheel_speeds[1] * 30 / math.pi))
         else:
-            self.get_logger().warning("unknown control mode '{}'".format(self.control_mode))
+            self.get_logger().warning(f"unknown control mode '{self.control_mode}'")
 
     def stop_ongoing_services(self) -> None:
         """Stops the SetSpeed service, if it was running"""
@@ -1472,7 +1458,7 @@ class ZuuuHAL(Node):
             else:
                 self.publish_fake_robot_speed(0, 0, 0)
         else:
-            msg = "Mode requested: {} => calling emergency_shutdown".format(mode)
+            msg = f"Unknown mode requested: '{mode}' => calling emergency_shutdown"
             self.emergency_shutdown(msg)
 
     def control_tick(self):
@@ -1538,7 +1524,7 @@ class ZuuuHAL(Node):
             f = 0.0
         else:
             f = 1.0 / dt
-        self.get_logger().info("zuuu tick potential freq: {:.0f}Hz (dt={:.0f}ms)".format(f, 1000 * dt))
+        self.get_logger().info("zuuu tick potential freq: {f:.0f}Hz (dt={1000 * dt:.0f}ms)")
 
     def main_tick(self, verbose: bool = False):
         """Main function of the HAL node. This function is made to be called often. Handles the main state machine"""
