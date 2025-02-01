@@ -1,20 +1,19 @@
+import math
 import threading
 import time
 from queue import Queue
 from threading import Event
-import math
 
 import numpy as np
 import rclpy
-from zuuu_interfaces.action import ZuuuGoto
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
-from rclpy.callback_groups import (
-    MutuallyExclusiveCallbackGroup,
-)  # ReentrantCallbackGroup
+from rclpy.callback_groups import \
+    MutuallyExclusiveCallbackGroup  # ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 
-from zuuu_hal.utils import PID, angle_diff, ZuuuModes, ZuuuControlModes
+from zuuu_hal.utils import PID, ZuuuControlModes, ZuuuModes, angle_diff
+from zuuu_interfaces.action import ZuuuGoto
 
 
 class ZuuuGotoActionServer(Node):

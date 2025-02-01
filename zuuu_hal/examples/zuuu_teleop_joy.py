@@ -1,18 +1,15 @@
+import math
+import os
 import sys
+import time
+import traceback
 
 import geometry_msgs.msg
-import rclpy
-
-from rclpy.node import Node
-import pygame
-import time
-import math
 import numpy as np
-import traceback
-import sys
-from rclpy.qos import ReliabilityPolicy, QoSProfile
-
-import os
+import pygame
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 
 # To be able to use pygame in "headless" mode
 # set SDL to use the dummy NULL video driver, so it doesn't need a windowing system.

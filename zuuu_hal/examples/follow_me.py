@@ -1,14 +1,15 @@
-import rclpy
-from rclpy.node import Node
-import time
 import math
-import numpy as np
-import traceback
-from pyvesc.VESC import MultiVESC
-from sensor_msgs.msg import LaserScan
-from rclpy.qos import ReliabilityPolicy, QoSProfile
-from geometry_msgs.msg import Twist
 import sys
+import time
+import traceback
+
+import numpy as np
+import rclpy
+from geometry_msgs.msg import Twist
+from pyvesc.VESC import MultiVESC
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy
+from sensor_msgs.msg import LaserScan
 
 # The cv2 import is only needed in the verbose mode of the follow_me
 # where images are created based on the LIDAR scan

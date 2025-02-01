@@ -1,5 +1,6 @@
-from reachy2_sdk import ReachySDK
 import time
+
+from reachy2_sdk import ReachySDK
 
 reachy = ReachySDK(host="localhost")
 
