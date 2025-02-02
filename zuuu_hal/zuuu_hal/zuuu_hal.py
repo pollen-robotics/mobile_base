@@ -23,9 +23,7 @@ from geometry_msgs.msg import TransformStamped, Twist
 from nav_msgs.msg import Odometry
 from pollen_msgs.msg import MobileBaseState
 from rcl_interfaces.msg import SetParametersResult
-from rclpy.callback_groups import (CallbackGroup,
-                                   MutuallyExclusiveCallbackGroup,
-                                   ReentrantCallbackGroup)
+from rclpy.callback_groups import CallbackGroup, MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.constants import S_TO_NS
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
@@ -35,13 +33,19 @@ from reachy_utils.config import ReachyConfig
 from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import Float32
 from tf2_ros import TransformBroadcaster
-from zuuu_interfaces.srv import (DistanceToGoal, GetBatteryVoltage,
-                                 GetOdometry, GetZuuuMode, GetZuuuSafety,
-                                 ResetOdometry, SetSpeed, SetZuuuMode,
-                                 SetZuuuSafety)
+from zuuu_interfaces.srv import (
+    DistanceToGoal,
+    GetBatteryVoltage,
+    GetOdometry,
+    GetZuuuMode,
+    GetZuuuSafety,
+    ResetOdometry,
+    SetSpeed,
+    SetZuuuMode,
+    SetZuuuSafety,
+)
 
-from zuuu_hal.kinematics import (dk_vel, ik_vel, pwm_to_wheel_rot_speed,
-                                 wheel_rot_speed_to_pwm)
+from zuuu_hal.kinematics import dk_vel, ik_vel, pwm_to_wheel_rot_speed, wheel_rot_speed_to_pwm
 from zuuu_hal.lidar_safety import LidarSafety
 from zuuu_hal.mobile_base import MobileBase
 from zuuu_hal.utils import PID, ZuuuControlModes, ZuuuModes, angle_diff, sign
@@ -333,8 +337,12 @@ class ZuuuHAL(Node):
         # Timers.
         self.create_timer(self.main_tick_period, self.main_tick)
         self.measurements_t = time.time()
-        self.check_battery()  # Check battery once at startup.
-        self.create_timer(self.omnibase.battery_check_period, self.check_battery)
+        self.check_battery_callback()  # Check battery once at startup.
+        self.create_timer(self.omnibase.battery_check_period, self.check_battery_callback)
+
+    # -------------------------------------------------------------------------
+    # Callbacks.
+    # -------------------------------------------------------------------------
 
     def parameters_callback(self, params) -> SetParametersResult:
         """When a ROS parameter is changed, this method will be called to verify the change and accept/deny it."""
@@ -411,6 +419,96 @@ class ZuuuHAL(Node):
                     success = True
 
         return SetParametersResult(successful=success)
+
+    def cmd_vel_callback(self, msg: Twist) -> None:
+        """Handles the callback on the /cmd_vel topic"""
+        self.cmd_vel = msg
+        self.cmd_vel_t0 = time.time()
+
+    def scan_filter_callback(self, msg: LaserScan) -> None:
+        """Callback method on the /scan topic. Handles the LIDAR filtering and safety calculations."""
+        self.scan_is_read = True
+        self.scan_t0 = time.time()
+        # LIDAR angle filter managemnt
+        # https://github.com/ros-perception/laser_filters was broken in ROS2 last time I checked
+        # => Doing it manually
+        filtered_scan = LaserScan()
+        filtered_scan.header = copy.deepcopy(msg.header)
+        filtered_scan.angle_min = msg.angle_min
+        filtered_scan.angle_max = msg.angle_max
+        filtered_scan.angle_increment = msg.angle_increment
+        filtered_scan.time_increment = msg.time_increment
+        filtered_scan.scan_time = msg.scan_time
+        filtered_scan.range_min = msg.range_min
+        filtered_scan.range_max = msg.range_max
+        ranges = []
+        intensities = []
+        angle_min_offset = 0.0
+        if self.fake_hardware:
+            angle_min_offset = -math.pi
+        for i, r in enumerate(msg.ranges):
+            angle = msg.angle_min + angle_min_offset + i * msg.angle_increment
+            if angle > self.laser_upper_angle or angle < self.laser_lower_angle:
+                ranges.append(0.0)
+                intensities.append(0.0)
+            else:
+                ranges.append(r)
+                intensities.append(msg.intensities[i])
+
+        filtered_scan.ranges = ranges
+        filtered_scan.intensities = intensities
+        self.scan_pub.publish(filtered_scan)
+
+        # LIDAR safety management
+        self.lidar_safety.clear_measures()
+        if self.safety_on:
+            self.lidar_safety.process_scan(filtered_scan)
+        # Publishing the safety image
+        lidar_img = self.lidar_safety.create_safety_img(filtered_scan)
+        self.lidar_image_pub.publish(self.cv_bridge.cv2_to_imgmsg(lidar_img))
+
+    def gazebo_odom_callback(self, msg: Odometry) -> None:
+        """Callback method on the /odom topic used in Gazebo mode"""
+        self.vx_gazebo = msg.twist.twist.linear.x
+        self.vy_gazebo = msg.twist.twist.linear.y
+        self.vtheta_gazebo = msg.twist.twist.angular.z
+
+        # reading the odometry from the gazebo plugin
+        self.x_odom_gazebo = msg.pose.pose.position.x
+        self.y_odom_gazebo = msg.pose.pose.position.y
+        q = msg.pose.pose.orientation
+        _, _, self.theta_odom_gazebo = tf_transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
+
+    def check_battery_callback(self, verbose: bool = False) -> None:
+        """Checks that the battery readings are not too old and forces a read if need be.
+        Checks that the battery voltages are safe and warns or stops the HAL accordingly.
+        """
+        if self.fake_hardware:
+            return
+        t = time.time()
+        if verbose:
+            self.print_all_measurements()
+        if (t - self.measurements_t) > (self.omnibase.battery_check_period + 1):
+            self.get_logger().warning("Zuuu's measurements are not made often enough. Reading now.")
+            self.read_measurements()
+        warn_voltage = self.omnibase.battery_nb_cells * self.omnibase.battery_cell_warn_voltage
+        min_voltage = self.omnibase.battery_nb_cells * self.omnibase.battery_cell_min_voltage
+        voltage = self.battery_voltage
+
+        if min_voltage < voltage < warn_voltage:
+            self.get_logger().warning(
+                f"Battery voltage LOW ({voltage}V). Consider recharging. Warning threshold: {warn_voltage:.1f}V, stop threshold: {min_voltage:.1f}V"
+            )
+        elif voltage < min_voltage:
+            msg = f"Battery voltage critically LOW ({voltage}V). Emergency shutdown! Warning threshold: {min_voltage:.1f}V, "
+            self.emergency_shutdown(msg)
+
+        else:
+            self.get_logger().warning(f"Battery voltage OK ({voltage}V)")
+
+    # -------------------------------------------------------------------------
+    # Service methods.
+    # -------------------------------------------------------------------------
 
     def handle_zuuu_mode(self, request: SetZuuuMode.Request, response: SetZuuuMode.Response) -> SetZuuuMode.Response:
         """Handle SetZuuuMode service request"""
@@ -511,6 +609,10 @@ class ZuuuHAL(Node):
         response.obstacle_detection_status = self.lidar_safety.obstacle_detection_status
         return response
 
+    # -------------------------------------------------------------------------
+    # Publish methods.
+    # -------------------------------------------------------------------------
+
     def publish_mobile_base_state(self) -> None:
         """Publishes the safety status in the `mobile_base_safety_status` topic"""
         msg = MobileBaseState()
@@ -545,117 +647,139 @@ class ZuuuHAL(Node):
 
         self.pub_mobile_base_state.publish(msg)
 
-    def check_battery(self, verbose: bool = False) -> None:
-        """Checks that the battery readings are not too old and forces a read if need be.
-        Checks that the battery voltages are safe and warns or stops the HAL accordingly.
-        """
-        if self.fake_hardware:
-            return
-        t = time.time()
-        if verbose:
-            self.print_all_measurements()
-        if (t - self.measurements_t) > (self.omnibase.battery_check_period + 1):
-            self.get_logger().warning("Zuuu's measurements are not made often enough. Reading now.")
-            self.read_measurements()
-        warn_voltage = self.omnibase.battery_nb_cells * self.omnibase.battery_cell_warn_voltage
-        min_voltage = self.omnibase.battery_nb_cells * self.omnibase.battery_cell_min_voltage
-        voltage = self.battery_voltage
+    def publish_wheel_speeds(self) -> None:
+        """Publishes the most recent measures of rotational speed for each of the 3 wheels on 3 separate topics."""
+        # If the measurements are None, not publishing
+        if self.omnibase.back_wheel_measurements is not None:
+            rpm_back = Float32()
+            if self.fake_hardware:
+                rpm_back.data = float(self.calculated_wheel_speeds[0])
+            else:
+                rpm_back.data = float(self.omnibase.back_wheel_measurements.rpm)
+            self.pub_back_wheel_rpm.publish(rpm_back)
 
-        if min_voltage < voltage < warn_voltage:
+        if self.omnibase.right_wheel_measurements is not None:
+            rpm_right = Float32()
+            if self.fake_hardware:
+                rpm_right.data = float(self.calculated_wheel_speeds[1])
+            else:
+                rpm_right.data = float(self.omnibase.right_wheel_measurements.rpm)
+            self.pub_right_wheel_rpm.publish(rpm_right)
+
+        if self.omnibase.left_wheel_measurements is not None:
+            rpm_left = Float32()
+            if self.fake_hardware:
+                rpm_left.data = float(self.calculated_wheel_speeds[2])
+            else:
+                rpm_left.data = float(self.omnibase.left_wheel_measurements.rpm)
+            self.pub_left_wheel_rpm.publish(rpm_left)
+
+    def publish_fake_robot_speed(self, x_vel, y_vel, theta_vel) -> None:
+        """Publishes the current robot speed (Twist type)"""
+        twist = Twist()
+        twist.linear.x = float(x_vel)
+        twist.linear.y = float(y_vel)
+        twist.angular.z = float(theta_vel)
+        # self.get_logger().info(f"Publishing fake robot speed: x={x_vel:.2f}m/s, y={y_vel:.2f}m/s, theta={theta_vel:.2f}rad/s")
+
+        self.pub_fake_vel.publish(twist)
+
+    def publish_odometry_and_tf(self) -> None:
+        """Publishes the current odometry position (Odometry type published on the /odom topic) and also
+        published the TransformStamped between the frame base_footprint and odom
+        """
+        # Odom
+        odom = Odometry()
+        odom.header.frame_id = "odom_zuuu"
+        odom.header.stamp = self.measure_timestamp.to_msg()
+        odom.child_frame_id = "base_footprint"
+        odom.pose.pose.position.x = self.x_odom
+        odom.pose.pose.position.y = self.y_odom
+        odom.pose.pose.position.z = 0.0
+        odom.twist.twist.linear.x = self.vx
+        odom.twist.twist.linear.y = self.vy
+        odom.twist.twist.angular.z = self.vtheta
+
+        q = tf_transformations.quaternion_from_euler(0.0, 0.0, self.theta_odom)
+        odom.pose.pose.orientation.x = q[0]
+        odom.pose.pose.orientation.y = q[1]
+        odom.pose.pose.orientation.z = q[2]
+        odom.pose.pose.orientation.w = q[3]
+
+        # Tune these numbers if needed
+        odom.pose.covariance = np.diag([1e-2, 1e-2, 1e-2, 1e3, 1e3, 1e-1]).ravel()
+        odom.twist.covariance = np.diag([1e-2, 1e3, 1e3, 1e3, 1e3, 1e-2]).ravel()
+        self.pub_odom.publish(odom)
+
+        # TF
+        t = TransformStamped()
+        t.header.stamp = self.measure_timestamp.to_msg()
+        t.header.frame_id = "odom"
+        t.child_frame_id = "base_footprint"
+
+        t.transform.translation.x = self.x_odom
+        t.transform.translation.y = self.y_odom
+        t.transform.translation.z = 0.0
+        t.transform.rotation.x = q[0]
+        t.transform.rotation.y = q[1]
+        t.transform.rotation.z = q[2]
+        t.transform.rotation.w = q[3]
+
+        self.br.sendTransform(t)
+
+    # -------------------------------------------------------------------------
+    # Utility methods.
+    # -------------------------------------------------------------------------
+
+    def limit_duty_cycles(self, duty_cycles: List[float]) -> List[float]:
+        """Limits the duty cycles to stay in +-max_duty_cycle"""
+        for i in range(len(duty_cycles)):
+            if duty_cycles[i] < 0:
+                temp = max(-self.max_duty_cycle, duty_cycles[i])
+                if temp != duty_cycles[i]:
+                    self.get_logger().warning("Duty cycle is LIMITED")
+                duty_cycles[i] = temp
+            else:
+                temp = min(self.max_duty_cycle, duty_cycles[i])
+                if temp != duty_cycles[i]:
+                    self.get_logger().warning("Duty cycle is LIMITED")
+                duty_cycles[i] = temp
+
+        return duty_cycles
+
+    def limit_wheel_speeds(self, wheel_speeds: List[float]) -> List[float]:
+        """Limits the wheel speeds to stay in +-max_wheel_speed"""
+        for i in range(len(wheel_speeds)):
+            if wheel_speeds[i] < 0:
+                temp = max(-self.max_wheel_speed, wheel_speeds[i])
+                if temp != wheel_speeds[i]:
+                    self.get_logger().warning("Wheel speed is LIMITED")
+                wheel_speeds[i] = temp
+            else:
+                temp = min(self.max_wheel_speed, wheel_speeds[i])
+                if temp != wheel_speeds[i]:
+                    self.get_logger().warning("Wheel speed is LIMITED")
+                wheel_speeds[i] = temp
+        return wheel_speeds
+
+    def limit_vel_commands(self, x_vel, y_vel, theta_vel):
+        xy_speed = math.sqrt(x_vel**2 + y_vel**2)
+        if xy_speed > self.max_speed_xy:
+            # This formula guarantees that the ratio x_vel/y_vel remains the same , while ensuring the xy_speed is equal to max_speed_xy
+            new_x_vel = math.sqrt(self.max_speed_xy**2 / (1 + (y_vel**2) / (x_vel**2)))
+            new_y_vel = new_x_vel * y_vel / x_vel
+            # self.get_logger().warning(
+            #     f"Requesting xy_speed ({xy_speed}) above maximum ({self.max_speed_xy}). Reducing it to {math.sqrt(new_x_vel**2+new_y_vel**2)}")
+            # The formula can mess up the signs, fixing them here
+            x_vel = sign(x_vel) * new_x_vel / sign(new_x_vel)
+            y_vel = sign(y_vel) * new_y_vel / sign(new_y_vel)
+        if abs(theta_vel) > self.max_speed_theta:
+            theta_vel = sign(theta_vel) * self.max_speed_theta
             self.get_logger().warning(
-                f"Battery voltage LOW ({voltage}V). Consider recharging. Warning threshold: {warn_voltage:.1f}V, stop threshold: {min_voltage:.1f}V"
+                f"Requesting theta_speed ({theta_vel}) above maximum ({self.max_speed_theta}). Reducing it."
             )
-        elif voltage < min_voltage:
-            msg = f"Battery voltage critically LOW ({voltage}V). Emergency shutdown! Warning threshold: {min_voltage:.1f}V, "
-            self.emergency_shutdown(msg)
 
-        else:
-            self.get_logger().warning(f"Battery voltage OK ({voltage}V)")
-
-    def emergency_shutdown(self, msg: str) -> None:
-        """
-        Sets the PWM of the three wheel motors to 0V (i.e., brakes the system) and raises a RuntimeError.
-
-        """
-        self.get_logger().warn(f"Emergency shutdown initiated in zuuu_hal: {msg}")
-
-        if self.already_shutdown:
-            return
-
-        try:
-            if not self.fake_hardware:
-                self.omnibase.back_wheel.set_duty_cycle(0)
-                self.omnibase.left_wheel.set_duty_cycle(0)
-                self.omnibase.right_wheel.set_duty_cycle(0)
-            else:
-                self.publish_fake_robot_speed(0, 0, 0)
-        except Exception as hardware_error:
-            self.get_logger().error(f"Error during hardware shutdown: {hardware_error}")
-        finally:
-            self.already_shutdown = True
-
-        time.sleep(0.1)
-
-        raise RuntimeError(msg)
-
-    def cmd_vel_callback(self, msg: Twist) -> None:
-        """Handles the callback on the /cmd_vel topic"""
-        self.cmd_vel = msg
-        self.cmd_vel_t0 = time.time()
-
-    def scan_filter_callback(self, msg: LaserScan) -> None:
-        """Callback method on the /scan topic. Handles the LIDAR filtering and safety calculations."""
-        self.scan_is_read = True
-        self.scan_t0 = time.time()
-        # LIDAR angle filter managemnt
-        # https://github.com/ros-perception/laser_filters was broken in ROS2 last time I checked
-        # => Doing it manually
-        filtered_scan = LaserScan()
-        filtered_scan.header = copy.deepcopy(msg.header)
-        filtered_scan.angle_min = msg.angle_min
-        filtered_scan.angle_max = msg.angle_max
-        filtered_scan.angle_increment = msg.angle_increment
-        filtered_scan.time_increment = msg.time_increment
-        filtered_scan.scan_time = msg.scan_time
-        filtered_scan.range_min = msg.range_min
-        filtered_scan.range_max = msg.range_max
-        ranges = []
-        intensities = []
-        angle_min_offset = 0.0
-        if self.fake_hardware:
-            angle_min_offset = -math.pi
-        for i, r in enumerate(msg.ranges):
-            angle = msg.angle_min + angle_min_offset + i * msg.angle_increment
-            if angle > self.laser_upper_angle or angle < self.laser_lower_angle:
-                ranges.append(0.0)
-                intensities.append(0.0)
-            else:
-                ranges.append(r)
-                intensities.append(msg.intensities[i])
-
-        filtered_scan.ranges = ranges
-        filtered_scan.intensities = intensities
-        self.scan_pub.publish(filtered_scan)
-
-        # LIDAR safety management
-        self.lidar_safety.clear_measures()
-        if self.safety_on:            
-            self.lidar_safety.process_scan(filtered_scan)
-        # Publishing the safety image
-        lidar_img = self.lidar_safety.create_safety_img(filtered_scan)
-        self.lidar_image_pub.publish(self.cv_bridge.cv2_to_imgmsg(lidar_img))
-
-    def gazebo_odom_callback(self, msg: Odometry) -> None:
-        """Callback method on the /odom topic used in Gazebo mode"""
-        self.vx_gazebo = msg.twist.twist.linear.x
-        self.vy_gazebo = msg.twist.twist.linear.y
-        self.vtheta_gazebo = msg.twist.twist.angular.z
-
-        # reading the odometry from the gazebo plugin
-        self.x_odom_gazebo = msg.pose.pose.position.x
-        self.y_odom_gazebo = msg.pose.pose.position.y
-        q = msg.pose.pose.orientation
-        _, _, self.theta_odom_gazebo = tf_transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
+        return x_vel, y_vel, theta_vel
 
     def filter_speed_goals(self, x_vel, y_vel, theta_vel):
         """Applies a smoothing filter"""
@@ -704,114 +828,131 @@ class ZuuuHAL(Node):
         to_print += f"\n\n AVG RPM left:{self.omnibase.left_wheel_avg_rpm / self.omnibase.half_poles:.2f}, right:{self.omnibase.right_wheel_avg_rpm / self.omnibase.half_poles:.2f}, back:{self.omnibase.back_wheel_avg_rpm / self.omnibase.half_poles:.2f}"
         self.get_logger().info(f"{to_print}")
 
-    def publish_wheel_speeds(self) -> None:
-        """Publishes the most recent measures of rotational speed for each of the 3 wheels on 3 separate topics."""
-        # If the measurements are None, not publishing
+    def check_for_lidar_scan(self, t):
+        if (not self.scan_is_read) or ((t - self.scan_t0) > self.scan_timeout):
+            # If too much time without a LIDAR scan, the speeds are set to 0 for safety.
+            self.get_logger().warning("waiting for a LIDAR scan to be read. Discarding all commands...")
+            wheel_speeds = self.ik_vel(0.0, 0.0, 0.0, self.omnibase)
+            self.send_wheel_commands(wheel_speeds)
+            time.sleep(0.5)
+            return False
+        return True
+
+    def print_loop_freq(self, t):
+        dt = time.time() - t
+        if dt == 0:
+            f = 0.0
+        else:
+            f = 1.0 / dt
+        self.get_logger().info("zuuu tick potential freq: {f:.0f}Hz (dt={1000 * dt:.0f}ms)")
+
+    def stop_ongoing_services(self) -> None:
+        """Stops the SetSpeed service, if it was running"""
+        self.speed_service_on = False
+
+    # -------------------------------------------------------------------------
+    # Read/write with the VESC controllers.
+    # -------------------------------------------------------------------------
+
+    def read_measurements(self) -> None:
+        """Calls the low level functions to read the measurements on the 3 wheel controllers"""
+        if self.fake_hardware:
+            return
+        self.omnibase.read_all_measurements()
         if self.omnibase.back_wheel_measurements is not None:
-            rpm_back = Float32()
-            if self.fake_hardware:
-                rpm_back.data = float(self.calculated_wheel_speeds[0])
-            else:
-                rpm_back.data = float(self.omnibase.back_wheel_measurements.rpm)
-            self.pub_back_wheel_rpm.publish(rpm_back)
+            self.battery_voltage = self.omnibase.back_wheel_measurements.v_in
+        elif self.omnibase.left_wheel_measurements is not None:
+            self.battery_voltage = self.omnibase.left_wheel_measurements.v_in
+        elif self.omnibase.right_wheel_measurements is not None:
+            self.battery_voltage = self.omnibase.right_wheel_measurements.v_in
+        else:
+            # Decidemment ! Keeping last valid measure...
+            self.nb_full_com_fails += 1
+            # self.get_logger().warning(
+            #     "Could not read any of the motor drivers. This should not happen too often.")
+            if self.nb_full_com_fails > self.max_full_com_fails:
+                msg = "Too many communication errors, emergency shutdown"
+                self.emergency_shutdown(msg)
+            return
+        # Read success
+        self.nb_full_com_fails = 0
+        self.measurements_t = time.time()
 
-        if self.omnibase.right_wheel_measurements is not None:
-            rpm_right = Float32()
-            if self.fake_hardware:
-                rpm_right.data = float(self.calculated_wheel_speeds[1])
-            else:
-                rpm_right.data = float(self.omnibase.right_wheel_measurements.rpm)
-            self.pub_right_wheel_rpm.publish(rpm_right)
+    def send_wheel_commands(self, wheel_speeds: List[float]) -> None:
+        """Sends either a PWM command or a speed command to the wheel controllers, based on the current control mode"""
+        if self.control_mode is ZuuuControlModes.OPEN_LOOP:
+            duty_cycles = [wheel_rot_speed_to_pwm(wheel_speed) for wheel_speed in wheel_speeds]
+            duty_cycles = self.limit_duty_cycles(duty_cycles)
+            self.omnibase.back_wheel.set_duty_cycle(duty_cycles[0])
+            self.omnibase.left_wheel.set_duty_cycle(duty_cycles[2])
+            self.omnibase.right_wheel.set_duty_cycle(duty_cycles[1])
+        elif self.control_mode is ZuuuControlModes.PID:
+            # rad/s to rpm to erpm
+            wheel_speeds = self.limit_wheel_speeds(wheel_speeds)
+            self.omnibase.back_wheel.set_rpm(int(self.omnibase.half_poles * wheel_speeds[0] * 30 / math.pi))
+            self.omnibase.left_wheel.set_rpm(int(self.omnibase.half_poles * wheel_speeds[2] * 30 / math.pi))
+            self.omnibase.right_wheel.set_rpm(int(self.omnibase.half_poles * wheel_speeds[1] * 30 / math.pi))
+        else:
+            self.get_logger().warning(f"unknown control mode '{self.control_mode}'")
 
-        if self.omnibase.left_wheel_measurements is not None:
-            rpm_left = Float32()
-            if self.fake_hardware:
-                rpm_left.data = float(self.calculated_wheel_speeds[2])
-            else:
-                rpm_left.data = float(self.omnibase.left_wheel_measurements.rpm)
-            self.pub_left_wheel_rpm.publish(rpm_left)
+    # -------------------------------------------------------------------------
+    # Behaviours.
+    # -------------------------------------------------------------------------
 
-    def update_wheel_speeds(self) -> None:
-        """Uses the latest mesure of wheel rotational speed to update the smoothed internal estimation of the wheel
-        rotational speed
+    def emergency_shutdown(self, msg: str) -> None:
         """
-        # Keeping a local value of the wheel speeds to handle None measurements (we'll use the last valid measure)
-        if self.omnibase.back_wheel_measurements is not None:
-            value = float(self.omnibase.back_wheel_measurements.rpm)
-            self.omnibase.back_wheel_rpm = value
-            self.omnibase.back_wheel_rpm_deque.appendleft(value)
-            self.omnibase.back_wheel_avg_rpm = self.omnibase.deque_to_avg(self.omnibase.back_wheel_rpm_deque)
-        else:
-            self.omnibase.back_wheel_nones += 1
+        Sets the PWM of the three wheel motors to 0V (i.e., brakes the system) and raises a RuntimeError.
 
-        if self.omnibase.left_wheel_measurements is not None:
-            value = float(self.omnibase.left_wheel_measurements.rpm)
-            self.omnibase.left_wheel_rpm = value
-            self.omnibase.left_wheel_rpm_deque.appendleft(value)
-            self.omnibase.left_wheel_avg_rpm = self.omnibase.deque_to_avg(self.omnibase.left_wheel_rpm_deque)
-        else:
-            self.omnibase.left_wheel_nones += 1
-
-        if self.omnibase.right_wheel_measurements is not None:
-            value = float(self.omnibase.right_wheel_measurements.rpm)
-            self.omnibase.right_wheel_rpm = value
-            self.omnibase.right_wheel_rpm_deque.appendleft(value)
-            self.omnibase.right_wheel_avg_rpm = self.omnibase.deque_to_avg(self.omnibase.right_wheel_rpm_deque)
-        else:
-            self.omnibase.right_wheel_nones += 1
-
-    def publish_odometry_and_tf(self) -> None:
-        """Publishes the current odometry position (Odometry type published on the /odom topic) and also
-        published the TransformStamped between the frame base_footprint and odom
         """
-        # Odom
-        odom = Odometry()
-        odom.header.frame_id = "odom_zuuu"
-        odom.header.stamp = self.measure_timestamp.to_msg()
-        odom.child_frame_id = "base_footprint"
-        odom.pose.pose.position.x = self.x_odom
-        odom.pose.pose.position.y = self.y_odom
-        odom.pose.pose.position.z = 0.0
-        odom.twist.twist.linear.x = self.vx
-        odom.twist.twist.linear.y = self.vy
-        odom.twist.twist.angular.z = self.vtheta
+        self.get_logger().warn(f"Emergency shutdown initiated in zuuu_hal: {msg}")
 
-        q = tf_transformations.quaternion_from_euler(0.0, 0.0, self.theta_odom)
-        odom.pose.pose.orientation.x = q[0]
-        odom.pose.pose.orientation.y = q[1]
-        odom.pose.pose.orientation.z = q[2]
-        odom.pose.pose.orientation.w = q[3]
+        if self.already_shutdown:
+            return
 
-        # Tune these numbers if needed
-        odom.pose.covariance = np.diag([1e-2, 1e-2, 1e-2, 1e3, 1e3, 1e-1]).ravel()
-        odom.twist.covariance = np.diag([1e-2, 1e3, 1e3, 1e3, 1e3, 1e-2]).ravel()
-        self.pub_odom.publish(odom)
+        try:
+            if not self.fake_hardware:
+                self.omnibase.back_wheel.set_duty_cycle(0)
+                self.omnibase.left_wheel.set_duty_cycle(0)
+                self.omnibase.right_wheel.set_duty_cycle(0)
+            else:
+                self.publish_fake_robot_speed(0, 0, 0)
+        except Exception as hardware_error:
+            self.get_logger().error(f"Error during hardware shutdown: {hardware_error}")
+        finally:
+            self.already_shutdown = True
 
-        # TF
-        t = TransformStamped()
-        t.header.stamp = self.measure_timestamp.to_msg()
-        t.header.frame_id = "odom"
-        t.child_frame_id = "base_footprint"
+        time.sleep(0.1)
 
-        t.transform.translation.x = self.x_odom
-        t.transform.translation.y = self.y_odom
-        t.transform.translation.z = 0.0
-        t.transform.rotation.x = q[0]
-        t.transform.rotation.y = q[1]
-        t.transform.rotation.z = q[2]
-        t.transform.rotation.w = q[3]
+        raise RuntimeError(msg)
 
-        self.br.sendTransform(t)
+    def control_tick(self):
+        if self.mode in ZuuuModes.speed_modes():
+            # Speed modes will perform different types of calculation, but will always output speeds in the robot's frame
+            if self.mode is ZuuuModes.CMD_VEL:
+                self.cmd_vel_tick()
+            elif self.mode is ZuuuModes.SPEED:
+                self.speed_mode_tick()
+            elif self.mode is ZuuuModes.GOTO:
+                self.goto_tick()
+            elif self.mode is ZuuuModes.CMD_GOTO:
+                self.cmd_goto_tick()
+            # Here, the following values have been calculated: self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal
+            self.process_velocity_goals_and_send_wheel_commands()
+        else:
+            # Stop modes directly send stopping commands to the wheels
+            self.stop_modes_tick(self.mode)
 
-    def publish_fake_robot_speed(self, x_vel, y_vel, theta_vel) -> None:
-        """Publishes the current robot speed (Twist type)"""
-        twist = Twist()
-        twist.linear.x = float(x_vel)
-        twist.linear.y = float(y_vel)
-        twist.angular.z = float(theta_vel)
-        # self.get_logger().info(f"Publishing fake robot speed: x={x_vel:.2f}m/s, y={y_vel:.2f}m/s, theta={theta_vel:.2f}rad/s")
+    def measurements_tick(self, verbose: bool = False):
+        if not self.fake_hardware:
+            # Reading the measurements (this is what takes most of the time, ~9ms).
+            self.read_measurements()
+            self.update_wheel_speeds()
+            self.publish_wheel_speeds()
+            if verbose:
+                self.print_all_measurements()
 
-        self.pub_fake_vel.publish(twist)
+        self.publish_wheel_speeds()
+        self.publish_mobile_base_state()
 
     def odom_tick(self) -> None:
         """Updates the odometry values based on the small displacement measured since the last tick,
@@ -884,6 +1025,85 @@ class ZuuuHAL(Node):
         self.publish_odometry_and_tf()
         # self.get_logger().info(f"XXX Odom: x={self.x_odom:.2f}m, y={self.y_odom:.2f}m, theta={self.theta_odom:.2f}rad")
 
+    def cmd_vel_tick(self):
+        t = time.time()
+        # If too much time without an order, the speeds are smoothed back to 0 for safety.
+        if (self.cmd_vel is not None) and ((t - self.cmd_vel_t0) < self.cmd_vel_timeout):
+            self.x_vel_goal = self.cmd_vel.linear.x
+            self.y_vel_goal = self.cmd_vel.linear.y
+            self.theta_vel_goal = self.cmd_vel.angular.z
+        else:
+            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = 0.0, 0.0, 0.0
+
+    def speed_mode_tick(self) -> None:
+        """Tick function for the speed mode. Will only set the speeds to 0 if the duration is over."""
+        if self.speed_service_deadline < time.time():
+            if self.speed_service_on:
+                self.get_logger().info("End of set speed duration, setting speeds to 0")
+            self.speed_service_on = False
+            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = 0.0, 0.0, 0.0
+
+    def goto_tick(self, shortest_angle=False, distance_pid=None, angle_pid=None):
+        """Tick function for the goto mode. Will calculate the robot's speed to reach a goal pose in the odometry frame.
+        This function uses a PID controlle for translation and a PID controller for rotation.
+        """
+        if distance_pid is None:
+            distance_pid = self.distance_pid
+        else:
+            distance_pid = distance_pid
+
+        if angle_pid is None:
+            angle_pid = self.angle_pid
+        else:
+            angle_pid = angle_pid
+
+        dx = self.x_odom - self.x_goal
+        dy = self.y_odom - self.y_goal
+        distance_error = math.sqrt(dx**2 + dy**2)
+        angle_error = self.theta_odom - self.theta_goal
+
+        dist_command = distance_pid.tick(distance_error)
+        if not shortest_angle:
+            # This version gives full control to the user
+            angle_command = angle_pid.tick(angle_error)
+        else:
+            # With this version the robot will rotate towards the goal with the shortest path
+            angle_command = angle_pid.tick(angle_error, is_angle=True)
+
+        if distance_error == 0:
+            x_command = 0
+            y_command = 0
+        else:
+            # The vector (dx, dy) is the vector from the robot to the goal in the odom frame
+            # Transforming that vector from the world-fixed odom frame to the robot-fixed frame
+            x_command = dx * math.cos(-self.theta_odom) - dy * math.sin(-self.theta_odom)
+            y_command = dx * math.sin(-self.theta_odom) + dy * math.cos(-self.theta_odom)
+
+            # Normalizing. The (x_command, y_command) vector is now a unit vector pointing towards the goal in the robot frame
+            x_command = x_command / distance_error
+            y_command = y_command / distance_error
+            # Scaling the command vector by the PID output
+            x_command *= dist_command
+            y_command *= dist_command
+
+        # No transformations to do with the angle_command as the Z odom axis is coolinear with the Z robot axis
+        self.x_vel_goal = x_command
+        self.y_vel_goal = y_command
+        self.theta_vel_goal = angle_command
+
+    def cmd_goto_tick(self):
+        t = time.time()
+        # If too much time without an order, the speeds are smoothed back to 0 for safety.
+        if (self.cmd_vel is not None) and ((t - self.cmd_vel_t0) < self.cmd_vel_timeout):
+            # Normal case, orders where received
+            self.x_vel_goal = self.cmd_vel.linear.x
+            self.y_vel_goal = self.cmd_vel.linear.y
+            self.theta_vel_goal = self.cmd_vel.angular.z
+            self.fake_vel_goals_to_goto_goals(self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal)
+            self.goto_tick(shortest_angle=False, distance_pid=self.distance_pid_cmd_goto, angle_pid=self.angle_pid_cmd_goto)
+        else:
+            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = 0.0, 0.0, 0.0
+
     def reset_odom_now(self):
         if self.mode is ZuuuModes.GOTO and self.goto_action_server.has_active_goals():
             # Resetting the odometry while a GoTo is ON might be dangerous. Stopping it to make sure:
@@ -897,101 +1117,6 @@ class ZuuuHAL(Node):
         self.x_odom = 0.0
         self.y_odom = 0.0
         self.theta_odom = 0.0
-
-    def limit_duty_cycles(self, duty_cycles: List[float]) -> List[float]:
-        """Limits the duty cycles to stay in +-max_duty_cycle"""
-        for i in range(len(duty_cycles)):
-            if duty_cycles[i] < 0:
-                temp = max(-self.max_duty_cycle, duty_cycles[i])
-                if temp != duty_cycles[i]:
-                    self.get_logger().warning("Duty cycle is LIMITED")
-                duty_cycles[i] = temp
-            else:
-                temp = min(self.max_duty_cycle, duty_cycles[i])
-                if temp != duty_cycles[i]:
-                    self.get_logger().warning("Duty cycle is LIMITED")
-                duty_cycles[i] = temp
-
-        return duty_cycles
-
-    def limit_wheel_speeds(self, wheel_speeds: List[float]) -> List[float]:
-        """Limits the wheel speeds to stay in +-max_wheel_speed"""
-        for i in range(len(wheel_speeds)):
-            if wheel_speeds[i] < 0:
-                temp = max(-self.max_wheel_speed, wheel_speeds[i])
-                if temp != wheel_speeds[i]:
-                    self.get_logger().warning("Wheel speed is LIMITED")
-                wheel_speeds[i] = temp
-            else:
-                temp = min(self.max_wheel_speed, wheel_speeds[i])
-                if temp != wheel_speeds[i]:
-                    self.get_logger().warning("Wheel speed is LIMITED")
-                wheel_speeds[i] = temp
-        return wheel_speeds
-
-    def limit_vel_commands(self, x_vel, y_vel, theta_vel):
-        xy_speed = math.sqrt(x_vel**2 + y_vel**2)
-        if xy_speed > self.max_speed_xy:
-            # This formula guarantees that the ratio x_vel/y_vel remains the same , while ensuring the xy_speed is equal to max_speed_xy
-            new_x_vel = math.sqrt(self.max_speed_xy**2 / (1 + (y_vel**2) / (x_vel**2)))
-            new_y_vel = new_x_vel * y_vel / x_vel
-            # self.get_logger().warning(
-            #     f"Requesting xy_speed ({xy_speed}) above maximum ({self.max_speed_xy}). Reducing it to {math.sqrt(new_x_vel**2+new_y_vel**2)}")
-            # The formula can mess up the signs, fixing them here
-            x_vel = sign(x_vel) * new_x_vel / sign(new_x_vel)
-            y_vel = sign(y_vel) * new_y_vel / sign(new_y_vel)
-        if abs(theta_vel) > self.max_speed_theta:
-            theta_vel = sign(theta_vel) * self.max_speed_theta
-            self.get_logger().warning(
-                f"Requesting theta_speed ({theta_vel}) above maximum ({self.max_speed_theta}). Reducing it."
-            )
-
-        return x_vel, y_vel, theta_vel
-
-    def read_measurements(self) -> None:
-        """Calls the low level functions to read the measurements on the 3 wheel controllers"""
-        if self.fake_hardware:
-            return
-        self.omnibase.read_all_measurements()
-        if self.omnibase.back_wheel_measurements is not None:
-            self.battery_voltage = self.omnibase.back_wheel_measurements.v_in
-        elif self.omnibase.left_wheel_measurements is not None:
-            self.battery_voltage = self.omnibase.left_wheel_measurements.v_in
-        elif self.omnibase.right_wheel_measurements is not None:
-            self.battery_voltage = self.omnibase.right_wheel_measurements.v_in
-        else:
-            # Decidemment ! Keeping last valid measure...
-            self.nb_full_com_fails += 1
-            # self.get_logger().warning(
-            #     "Could not read any of the motor drivers. This should not happen too often.")
-            if self.nb_full_com_fails > self.max_full_com_fails:
-                msg = "Too many communication errors, emergency shutdown"
-                self.emergency_shutdown(msg)
-            return
-        # Read success
-        self.nb_full_com_fails = 0
-        self.measurements_t = time.time()
-
-    def send_wheel_commands(self, wheel_speeds: List[float]) -> None:
-        """Sends either a PWM command or a speed command to the wheel controllers, based on the current control mode"""
-        if self.control_mode is ZuuuControlModes.OPEN_LOOP:
-            duty_cycles = [wheel_rot_speed_to_pwm(wheel_speed) for wheel_speed in wheel_speeds]
-            duty_cycles = self.limit_duty_cycles(duty_cycles)
-            self.omnibase.back_wheel.set_duty_cycle(duty_cycles[0])
-            self.omnibase.left_wheel.set_duty_cycle(duty_cycles[2])
-            self.omnibase.right_wheel.set_duty_cycle(duty_cycles[1])
-        elif self.control_mode is ZuuuControlModes.PID:
-            # rad/s to rpm to erpm
-            wheel_speeds = self.limit_wheel_speeds(wheel_speeds)
-            self.omnibase.back_wheel.set_rpm(int(self.omnibase.half_poles * wheel_speeds[0] * 30 / math.pi))
-            self.omnibase.left_wheel.set_rpm(int(self.omnibase.half_poles * wheel_speeds[2] * 30 / math.pi))
-            self.omnibase.right_wheel.set_rpm(int(self.omnibase.half_poles * wheel_speeds[1] * 30 / math.pi))
-        else:
-            self.get_logger().warning(f"unknown control mode '{self.control_mode}'")
-
-    def stop_ongoing_services(self) -> None:
-        """Stops the SetSpeed service, if it was running"""
-        self.speed_service_on = False
 
     def handle_joy_discretization(self, dx, dy, dtheta, almost_zero=0.001, nb_directions=8):
         if abs(dx) < almost_zero and abs(dy) < almost_zero:
@@ -1154,86 +1279,7 @@ class ZuuuHAL(Node):
             # self.get_logger().info(
             #     f"self.x_goal={self.x_goal:.2f}, self.y_goal={self.y_goal:.2f}, self.theta_goal={self.theta_goal:.2f}")
 
-    def cmd_vel_tick(self):
-        t = time.time()
-        # If too much time without an order, the speeds are smoothed back to 0 for safety.
-        if (self.cmd_vel is not None) and ((t - self.cmd_vel_t0) < self.cmd_vel_timeout):
-            self.x_vel_goal = self.cmd_vel.linear.x
-            self.y_vel_goal = self.cmd_vel.linear.y
-            self.theta_vel_goal = self.cmd_vel.angular.z
-        else:
-            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = 0.0, 0.0, 0.0
-
-    def speed_mode_tick(self) -> None:
-        """Tick function for the speed mode. Will only set the speeds to 0 if the duration is over."""
-        if self.speed_service_deadline < time.time():
-            if self.speed_service_on:
-                self.get_logger().info("End of set speed duration, setting speeds to 0")
-            self.speed_service_on = False
-            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = 0.0, 0.0, 0.0
-
-    def goto_tick(self, shortest_angle=False, distance_pid=None, angle_pid=None):
-        """Tick function for the goto mode. Will calculate the robot's speed to reach a goal pose in the odometry frame.
-        This function uses a PID controlle for translation and a PID controller for rotation.
-        """
-        if distance_pid is None:
-            distance_pid = self.distance_pid
-        else:
-            distance_pid = distance_pid
-
-        if angle_pid is None:
-            angle_pid = self.angle_pid
-        else:
-            angle_pid = angle_pid
-
-        dx = self.x_odom - self.x_goal
-        dy = self.y_odom - self.y_goal
-        distance_error = math.sqrt(dx**2 + dy**2)
-        angle_error = self.theta_odom - self.theta_goal
-
-        dist_command = distance_pid.tick(distance_error)
-        if not shortest_angle:
-            # This version gives full control to the user
-            angle_command = angle_pid.tick(angle_error)
-        else:
-            # With this version the robot will rotate towards the goal with the shortest path
-            angle_command = angle_pid.tick(angle_error, is_angle=True)
-
-        if distance_error == 0:
-            x_command = 0
-            y_command = 0
-        else:
-            # The vector (dx, dy) is the vector from the robot to the goal in the odom frame
-            # Transforming that vector from the world-fixed odom frame to the robot-fixed frame
-            x_command = dx * math.cos(-self.theta_odom) - dy * math.sin(-self.theta_odom)
-            y_command = dx * math.sin(-self.theta_odom) + dy * math.cos(-self.theta_odom)
-
-            # Normalizing. The (x_command, y_command) vector is now a unit vector pointing towards the goal in the robot frame
-            x_command = x_command / distance_error
-            y_command = y_command / distance_error
-            # Scaling the command vector by the PID output
-            x_command *= dist_command
-            y_command *= dist_command
-
-        # No transformations to do with the angle_command as the Z odom axis is coolinear with the Z robot axis
-        self.x_vel_goal = x_command
-        self.y_vel_goal = y_command
-        self.theta_vel_goal = angle_command
-
-    def cmd_goto_tick(self):
-        t = time.time()
-        # If too much time without an order, the speeds are smoothed back to 0 for safety.
-        if (self.cmd_vel is not None) and ((t - self.cmd_vel_t0) < self.cmd_vel_timeout):
-            # Normal case, orders where received
-            self.x_vel_goal = self.cmd_vel.linear.x
-            self.y_vel_goal = self.cmd_vel.linear.y
-            self.theta_vel_goal = self.cmd_vel.angular.z
-            self.fake_vel_goals_to_goto_goals(self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal)
-            self.goto_tick(shortest_angle=False, distance_pid=self.distance_pid_cmd_goto, angle_pid=self.angle_pid_cmd_goto)
-        else:
-            self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = 0.0, 0.0, 0.0
-
-    def handle_stop_modes(self, mode):
+    def stop_modes_tick(self, mode):
         self.calculated_wheel_speeds = [0.0, 0.0, 0.0]
         # To avoid smoothing shenanigans if we go back to a speed mode
         self.x_vel_goal_filtered = 0.0
@@ -1258,23 +1304,6 @@ class ZuuuHAL(Node):
             msg = f"Unknown mode requested: '{mode}' => calling emergency_shutdown"
             self.emergency_shutdown(msg)
 
-    def control_tick(self):
-        if self.mode in ZuuuModes.speed_modes():
-            # Speed modes will perform different types of calculation, but will always output speeds in the robot's frame
-            if self.mode is ZuuuModes.CMD_VEL:
-                self.cmd_vel_tick()
-            elif self.mode is ZuuuModes.SPEED:
-                self.speed_mode_tick()
-            elif self.mode is ZuuuModes.GOTO:
-                self.goto_tick()
-            elif self.mode is ZuuuModes.CMD_GOTO:
-                self.cmd_goto_tick()
-            # Here, the following values have been calculated: self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal
-            self.process_velocity_goals_and_send_wheel_commands()
-        else:
-            # Stop modes directly send stopping commands to the wheels
-            self.handle_stop_modes(self.mode)
-
     def process_velocity_goals_and_send_wheel_commands(self):
         """Processes the robot speed goals and sends the calculated wheel speeds to the wheel controllers.
         The robot speed goals are filtered, safety checked and then transformed into wheel speeds using the IK.
@@ -1293,35 +1322,34 @@ class ZuuuHAL(Node):
             # Sending the commands to the physical wheels
             self.send_wheel_commands(self.calculated_wheel_speeds)
 
-    def measurements_tick(self, verbose: bool = False):
-        if not self.fake_hardware:
-            # Reading the measurements (this is what takes most of the time, ~9ms).
-            self.read_measurements()
-            self.update_wheel_speeds()
-            self.publish_wheel_speeds()
-            if verbose:
-                self.print_all_measurements()
-
-        self.publish_wheel_speeds()
-        self.publish_mobile_base_state()
-
-    def check_for_lidar_scan(self, t):
-        if (not self.scan_is_read) or ((t - self.scan_t0) > self.scan_timeout):
-            # If too much time without a LIDAR scan, the speeds are set to 0 for safety.
-            self.get_logger().warning("waiting for a LIDAR scan to be read. Discarding all commands...")
-            wheel_speeds = self.ik_vel(0.0, 0.0, 0.0, self.omnibase)
-            self.send_wheel_commands(wheel_speeds)
-            time.sleep(0.5)
-            return False
-        return True
-
-    def print_loop_freq(self, t):
-        dt = time.time() - t
-        if dt == 0:
-            f = 0.0
+    def update_wheel_speeds(self) -> None:
+        """Uses the latest mesure of wheel rotational speed to update the smoothed internal estimation of the wheel
+        rotational speed
+        """
+        # Keeping a local value of the wheel speeds to handle None measurements (we'll use the last valid measure)
+        if self.omnibase.back_wheel_measurements is not None:
+            value = float(self.omnibase.back_wheel_measurements.rpm)
+            self.omnibase.back_wheel_rpm = value
+            self.omnibase.back_wheel_rpm_deque.appendleft(value)
+            self.omnibase.back_wheel_avg_rpm = self.omnibase.deque_to_avg(self.omnibase.back_wheel_rpm_deque)
         else:
-            f = 1.0 / dt
-        self.get_logger().info("zuuu tick potential freq: {f:.0f}Hz (dt={1000 * dt:.0f}ms)")
+            self.omnibase.back_wheel_nones += 1
+
+        if self.omnibase.left_wheel_measurements is not None:
+            value = float(self.omnibase.left_wheel_measurements.rpm)
+            self.omnibase.left_wheel_rpm = value
+            self.omnibase.left_wheel_rpm_deque.appendleft(value)
+            self.omnibase.left_wheel_avg_rpm = self.omnibase.deque_to_avg(self.omnibase.left_wheel_rpm_deque)
+        else:
+            self.omnibase.left_wheel_nones += 1
+
+        if self.omnibase.right_wheel_measurements is not None:
+            value = float(self.omnibase.right_wheel_measurements.rpm)
+            self.omnibase.right_wheel_rpm = value
+            self.omnibase.right_wheel_rpm_deque.appendleft(value)
+            self.omnibase.right_wheel_avg_rpm = self.omnibase.deque_to_avg(self.omnibase.right_wheel_rpm_deque)
+        else:
+            self.omnibase.right_wheel_nones += 1
 
     def main_tick(self, verbose: bool = False):
         """Main function of the HAL node. This function is made to be called often. Handles the main state machine"""

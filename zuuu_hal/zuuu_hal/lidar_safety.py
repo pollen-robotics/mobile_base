@@ -35,13 +35,13 @@ class LidarSafety:
         fake_hardware: bool = False,
     ) -> None:
         """Utility class to reduce the robot's speed when obstacles are too close as detected by the LIDAR.
-        
+
         Functional behavior:
           - safety_distance >= critical_distance.
           - The robot's speed is reduced if the direction of motion matches the direction of at least one LIDAR point within the safety_distance range.
           - The robot's speed is set to zero if the direction of motion matches that of any LIDAR point within the critical_distance range.
           - If any point is within the critical distance, even motions moving away from the obstacles are reduced to the safety zone speed.
-        
+
         Args:
             safety_distance (float): Distance within which obstacles cause speed reduction.
             critical_distance (float): Distance within which obstacles force the robot to stop (for x, y).
@@ -76,10 +76,7 @@ class LidarSafety:
             else:
                 self.x_offset = 0.1815
         except Exception:
-            msg = (
-                "ZUUU version can't be processed, check that the 'zuuu_model' tag is "
-                "present in the .reachy.yaml file"
-            )
+            msg = "ZUUU version can't be processed, check that the 'zuuu_model' tag is " "present in the .reachy.yaml file"
             self.logger.error(msg)
             self.logger.error(traceback.format_exc())
             raise RuntimeError(msg)
@@ -92,7 +89,7 @@ class LidarSafety:
 
     def process_scan(self, msg: LaserScan) -> None:
         """Processes a LaserScan message to determine which points may pose a safety hazard.
-        
+
         It clears previous measures, then for each LIDAR point (ignoring infinite ranges) calculates
         its distance and, based on its intensity and proximity, appends a forbidden angle span to either
         unsafe_angles or critical_angles.
@@ -133,17 +130,17 @@ class LidarSafety:
 
     def safety_check_speed_command(self, x_vel: float, y_vel: float, theta_vel: float) -> List[float]:
         """Limits the input speed command based on detected safety hazards.
-        
+
         Returns the (possibly reduced) speed commands and sets self.obstacle_detection_status as follows:
             - "green": no obstacle detected.
             - "orange": obstacle detected but not in the desired direction.
             - "red": obstacle detected in the desired direction.
-        
+
         Args:
             x_vel (float): Desired x speed.
             y_vel (float): Desired y speed.
             theta_vel (float): Desired rotational speed.
-        
+
         Returns:
             List[float]: Limited [x_vel, y_vel, theta_vel] commands.
         """
@@ -185,13 +182,13 @@ class LidarSafety:
 
     def dist_to_point(self, r: float, angle: float) -> Tuple[float, float, float]:
         """Calculates the distance between a LIDAR point and the robot's center.
-        
+
         Converts the point from the LIDAR frame to the base_footprint frame.
-        
+
         Args:
             r (float): Range reading from the LIDAR.
             angle (float): Angle of the LIDAR reading.
-        
+
         Returns:
             Tuple[float, float, float]: (distance, x, y) where x and y are the coordinates in the base_footprint frame.
         """
@@ -203,11 +200,11 @@ class LidarSafety:
 
     def create_forbidden_angles(self, angle: float, dist: float) -> List[float]:
         """Creates a pair [angle, half_forbidden_angle_span] representing a dangerous direction.
-        
+
         Args:
             angle (float): Center angle.
             dist (float): Distance from the robot; used to compute the span.
-        
+
         Returns:
             List[float]: [angle, beta], where beta is half of the forbidden angle span.
         """
@@ -216,14 +213,14 @@ class LidarSafety:
 
     def create_safety_img(self, msg: LaserScan, range_max: float = 3.0) -> np.ndarray:
         """Creates a safety image from a LaserScan message.
-        
+
         Args:
             msg (LaserScan): The input LaserScan message.
             range_max (float, optional): Maximum range to visualize (default: 3.0 m).
-        
+
         Returns:
             np.ndarray: An image (BGR) with white pixels marking detected obstacles.
-            
+
         Note: If msg is None, returns a dummy value.
         """
         if msg is None:
