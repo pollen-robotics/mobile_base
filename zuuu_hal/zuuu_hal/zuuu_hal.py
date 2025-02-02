@@ -38,6 +38,7 @@ from tf2_ros import TransformBroadcaster
 
 from zuuu_hal.lidar_safety import LidarSafety
 from zuuu_hal.mobile_base import MobileBase
+from zuuu_hal.kinematics import wheel_rot_speed_to_pwm, pwm_to_wheel_rot_speed, ik_vel, dk_vel
 from zuuu_hal.utils import PID, ZuuuControlModes, ZuuuModes, angle_diff, sign
 from zuuu_hal.zuuu_goto_action_server import ZuuuGotoActionServer
 from zuuu_interfaces.srv import (DistanceToGoal, GetBatteryVoltage,
@@ -258,7 +259,7 @@ class ZuuuHAL(Node):
         self.distance_pid = PID(p=5.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=0.2)
         self.angle_pid = PID(p=5.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=0.5)
 
-        self.max_wheel_speed = self.pwm_to_wheel_rot_speed(self.max_duty_cycle)
+        self.max_wheel_speed = pwm_to_wheel_rot_speed(self.max_duty_cycle)
         self.get_logger().info(
             f"The maximum PWM value is {self.max_duty_cycle * 100}% => maximum wheel speed is set to {self.max_wheel_speed:.2f} rad/s"
         )
@@ -663,111 +664,7 @@ class ZuuuHAL(Node):
         q = msg.pose.pose.orientation
         _, _, self.theta_odom_gazebo = tf_transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
 
-    def wheel_rot_speed_to_pwm_no_friction(self, rot: float) -> float:
-        """Uses a simple linear model to map the expected rotational speed of the wheel to a constant PWM
-        (based on measures made on a full Reachy Mobile)
-        """
-        return rot / 22.7
 
-    def wheel_rot_speed_to_pwm(self, rot: float) -> float:
-        """Uses a simple affine model to map the expected rotational speed of the wheel to a constant PWM
-        (based on measures made on a full Reachy Mobile)
-        """
-        # Creating an arteficial null zone to avoid undesired behaviours for very small rot speeds
-        epsilon = 0.02
-        if rot > epsilon:
-            pwm = 0.0418 * rot + 0.0126
-        elif rot < -epsilon:
-            pwm = 0.0418 * rot - 0.0126
-        else:
-            pwm = 0.0
-
-        return pwm
-
-    def pwm_to_wheel_rot_speed(self, pwm: float) -> float:
-        """Uses a simple affine model to map a pwm to the expected rotational speed of the wheel
-        (based on measures made on a full Reachy Mobile)
-        """
-        # Creating an arteficial null zone to avoid undesired behaviours for very small rot speeds
-        if abs(pwm) < 0.0126:
-            rot = 0.0
-        else:
-            rot = sign(pwm) * (abs(pwm) - 0.0126) / 0.0418
-
-        return rot
-
-    def ik_vel_to_pwm(self, x_vel: float, y_vel: float, rot_vel: float) -> List[float]:
-        """Takes 2 linear speeds and 1 rot speed (robot's egocentric frame)
-        and outputs the PWM to apply to each of the 3 motors in an omni setup
-
-        Args:
-            x (float): x speed (m/s). Positive "in front" of the robot.
-            y (float): y speed (m/s). Positive "to the left" of the robot.
-            rot (float): rotational speed (rad/s). Positive counter-clock wise.
-
-        """
-        rot_vels = self.ik_vel(x_vel, y_vel, rot_vel)
-        return [self.wheel_rot_speed_to_pwm(rot_vel) for rot_vel in rot_vels]
-
-    def ik_vel_old(self, x: float, y: float, rot: float) -> List[float]:
-        """Takes 2 linear speeds and 1 rot speed (robot's egocentric frame)
-        and outputs the PWM to apply to each of the 3 motors in an omni setup
-
-        Args:
-            x (float): x speed (between -1 and 1). Positive "in front" of the robot.
-            y (float): y speed (between -1 and 1). Positive "to the left" of the robot.
-            rot (float): rotational speed (between -1 and 1). Positive counter-clock wise.
-        """
-        cycle_back = -y + rot
-        cycle_right = (-y * np.cos(120 * np.pi / 180)) + (x * np.sin(120 * np.pi / 180)) + rot
-        cycle_left = (-y * np.cos(240 * np.pi / 180)) + (x * np.sin(240 * np.pi / 180)) + rot
-
-        return [cycle_back, cycle_right, cycle_left]
-
-    # Interesting stuff can be found in Modern Robotics' chapters:
-    # 13.2 Omnidirectional Wheeled Mobile Robots
-    # 13.4 Odometry
-    # /!\ Our robot frame is different. Matching between their names (left) and ours (right):
-    # xb=y, yb=-x, theta=-theta, u1=uB, u2=uL, u3=uR
-    def ik_vel(self, x_vel: float, y_vel: float, rot_vel: float) -> List[float]:
-        """Takes 2 linear speeds and 1 rot speed (robot's egocentric frame) and outputs the rotational speed (rad/s)
-        of each of the 3 motors in an omni setup
-
-        Args:
-            x (float): x speed (m/s). Positive "in front" of the robot.
-            y (float): y speed (m/s). Positive "to the left" of the robot.
-            rot (float): rotational speed (rad/s). Positive counter-clock wise.
-        """
-
-        wheel_rot_speed_back = (1 / self.omnibase.wheel_radius) * (self.omnibase.wheel_to_center * rot_vel - y_vel)
-        wheel_rot_speed_right = (1 / self.omnibase.wheel_radius) * (
-            self.omnibase.wheel_to_center * rot_vel + y_vel / 2.0 + math.sin(math.pi / 3) * x_vel
-        )
-        wheel_rot_speed_left = (1 / self.omnibase.wheel_radius) * (
-            self.omnibase.wheel_to_center * rot_vel + math.sin(math.pi / 3) * y_vel / 2 - math.sin(math.pi / 3) * x_vel
-        )
-
-        return [wheel_rot_speed_back, wheel_rot_speed_right, wheel_rot_speed_left]
-
-    def dk_vel(self, rot_l: float, rot_r: float, rot_b: float) -> Tuple[float, float, float]:
-        """Takes the 3 rotational speeds (in rpm) of the 3 wheels and outputs the x linear speed (m/s),
-        y linear speed (m/s) and rotational speed (rad/s) in the robot egocentric frame
-
-        Args:
-            rot_l (float): rpm speed of the left wheel
-            rot_r (float): rpm speed of the right wheel
-            rot_b (float): rpm speed of the back wheel
-        """
-        # rpm to rad/s then m/s
-        speed_l = (2 * math.pi * rot_l / 60) * self.omnibase.wheel_radius
-        speed_r = (2 * math.pi * rot_r / 60) * self.omnibase.wheel_radius
-        speed_b = (2 * math.pi * rot_b / 60) * self.omnibase.wheel_radius
-
-        x_vel = -speed_l * (1 / (2 * math.sin(math.pi / 3))) + speed_r * (1 / (2 * math.sin(math.pi / 3)))
-        y_vel = -speed_b * 2 / 3.0 + speed_l * 1 / 3.0 + speed_r * 1 / 3.0
-        theta_vel = (speed_l + speed_r + speed_b) / (3 * self.omnibase.wheel_to_center)
-
-        return x_vel, y_vel, theta_vel
 
     def filter_speed_goals(self, x_vel, y_vel, theta_vel):
         """Applies a smoothing filter"""
@@ -943,10 +840,11 @@ class ZuuuHAL(Node):
             # Local speeds in egocentric frame deduced from the wheel speeds
             # "rpm" are actually erpm and need to be divided by half the amount of magnetic poles to get the actual rpm.
             pole_factor = self.omnibase.half_poles
-            x_vel, y_vel, theta_vel = self.dk_vel(
+            x_vel, y_vel, theta_vel = dk_vel(
                 self.omnibase.left_wheel_rpm * pole_factor,
                 self.omnibase.right_wheel_rpm * pole_factor,
                 self.omnibase.back_wheel_rpm * pole_factor,
+                self.omnibase,
             )
             # Applying the small displacement in the world-fixed odom frame (simple 2D rotation)
             dx = (x_vel * math.cos(self.theta_odom) - y_vel * math.sin(self.theta_odom)) * dt_seconds
@@ -1086,7 +984,7 @@ class ZuuuHAL(Node):
     def send_wheel_commands(self, wheel_speeds: List[float]) -> None:
         """Sends either a PWM command or a speed command to the wheel controllers, based on the current control mode"""
         if self.control_mode is ZuuuControlModes.OPEN_LOOP:
-            duty_cycles = [self.wheel_rot_speed_to_pwm(wheel_speed) for wheel_speed in wheel_speeds]
+            duty_cycles = [wheel_rot_speed_to_pwm(wheel_speed) for wheel_speed in wheel_speeds]
             duty_cycles = self.limit_duty_cycles(duty_cycles)
             self.omnibase.back_wheel.set_duty_cycle(duty_cycles[0])
             self.omnibase.left_wheel.set_duty_cycle(duty_cycles[2])
@@ -1104,16 +1002,6 @@ class ZuuuHAL(Node):
         """Stops the SetSpeed service, if it was running"""
         self.speed_service_on = False
 
-    def did_mode_change(self, dx, dy, dtheta, almost_zero=0.001):
-        if self.only_x:
-            if abs(dy) > almost_zero:
-                self.only_x = False
-                return True
-        else:
-            if abs(dx) > almost_zero:
-                self.only_x = True
-                return True
-        return False
 
     def handle_joy_discretization(self, dx, dy, dtheta, almost_zero=0.001, nb_directions=8):
         if abs(dx) < almost_zero and abs(dy) < almost_zero:
@@ -1407,7 +1295,7 @@ class ZuuuHAL(Node):
         x_vel, y_vel, theta_vel = self.limit_vel_commands(x_vel, y_vel, theta_vel)
 
         # IK calculations. From Robot's speed to wheels' speeds
-        self.calculated_wheel_speeds = self.ik_vel(x_vel, y_vel, theta_vel)
+        self.calculated_wheel_speeds = ik_vel(x_vel, y_vel, theta_vel, self.omnibase)
         if self.fake_hardware:
             # In fake or Gazebo mode, the robot's speed is published directly and the mouvement is simulated
             self.publish_fake_robot_speed(x_vel, y_vel, theta_vel)
@@ -1431,7 +1319,7 @@ class ZuuuHAL(Node):
         if (not self.scan_is_read) or ((t - self.scan_t0) > self.scan_timeout):
             # If too much time without a LIDAR scan, the speeds are set to 0 for safety.
             self.get_logger().warning("waiting for a LIDAR scan to be read. Discarding all commands...")
-            wheel_speeds = self.ik_vel(0.0, 0.0, 0.0)
+            wheel_speeds = self.ik_vel(0.0, 0.0, 0.0, self.omnibase)
             self.send_wheel_commands(wheel_speeds)
             time.sleep(0.5)
             return False
