@@ -17,14 +17,14 @@ from typing import List, Optional, Tuple
 import numpy as np
 import rclpy
 import rclpy.logging
-from rclpy.callback_groups import CallbackGroup
 import tf_transformations
 from cv_bridge import CvBridge
 from geometry_msgs.msg import TransformStamped, Twist
 from nav_msgs.msg import Odometry
 from pollen_msgs.msg import MobileBaseState
 from rcl_interfaces.msg import SetParametersResult
-from rclpy.callback_groups import (MutuallyExclusiveCallbackGroup,
+from rclpy.callback_groups import (CallbackGroup,
+                                   MutuallyExclusiveCallbackGroup,
                                    ReentrantCallbackGroup)
 from rclpy.constants import S_TO_NS
 from rclpy.executors import MultiThreadedExecutor
@@ -35,17 +35,17 @@ from reachy_utils.config import ReachyConfig
 from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import Float32
 from tf2_ros import TransformBroadcaster
-
-from zuuu_hal.lidar_safety import LidarSafety
-from zuuu_hal.mobile_base import MobileBase
-from zuuu_hal.kinematics import wheel_rot_speed_to_pwm, pwm_to_wheel_rot_speed, ik_vel, dk_vel
-from zuuu_hal.utils import PID, ZuuuControlModes, ZuuuModes, angle_diff, sign
-from zuuu_hal.zuuu_goto_action_server import ZuuuGotoActionServer
 from zuuu_interfaces.srv import (DistanceToGoal, GetBatteryVoltage,
                                  GetOdometry, GetZuuuMode, GetZuuuSafety,
                                  ResetOdometry, SetSpeed, SetZuuuMode,
                                  SetZuuuSafety)
 
+from zuuu_hal.kinematics import (dk_vel, ik_vel, pwm_to_wheel_rot_speed,
+                                 wheel_rot_speed_to_pwm)
+from zuuu_hal.lidar_safety import LidarSafety
+from zuuu_hal.mobile_base import MobileBase
+from zuuu_hal.utils import PID, ZuuuControlModes, ZuuuModes, angle_diff, sign
+from zuuu_hal.zuuu_goto_action_server import ZuuuGotoActionServer
 
 
 class ZuuuHAL(Node):
@@ -97,10 +97,7 @@ class ZuuuHAL(Node):
         try:
             float_model = float(self.zuuu_version)
         except Exception:
-            msg = (
-                "ZUUU version can't be processed, check that the 'zuuu_version' tag is present "
-                "in the .reachy.yaml file"
-            )
+            msg = "ZUUU version can't be processed, check that the 'zuuu_version' tag is present " "in the .reachy.yaml file"
             self.get_logger().error(msg)
             self.get_logger().error(traceback.format_exc())
             raise RuntimeError(msg)
@@ -236,7 +233,6 @@ class ZuuuHAL(Node):
         )
         self.cv_bridge = CvBridge()
 
-
     def _init_pid_controllers(self) -> None:
         """
         PID values tuned on Reachy 2 15/10/2024.
@@ -246,7 +242,7 @@ class ZuuuHAL(Node):
 
         We also tested a full PID tuning (instead of just P), but the promise of "eliminating the steady-state error"
         does not work well with the small "steps" produced by the holonomic wheel.
-        
+
         No over-shoot Ziegler Nichols:
         self.theta_pid = PID(p=3.2, i=14.2, d=0.475, max_command=4.0, max_i_contribution=1.0)
         """
@@ -255,7 +251,7 @@ class ZuuuHAL(Node):
         # TODO test IRL if this is a good idea. Not using it for now
         # self.slow_distance_pid_cmd_goto = PID(p=1.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=0.2)
         # self.slow_angle_pid_cmd_goto = PID(p=1.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=0.5)
-        
+
         self.distance_pid = PID(p=5.0, i=0.0, d=0.0, max_command=0.4, max_i_contribution=0.2)
         self.angle_pid = PID(p=5.0, i=0.0, d=0.0, max_command=1.0, max_i_contribution=0.5)
 
@@ -340,7 +336,6 @@ class ZuuuHAL(Node):
         self.check_battery()  # Check battery once at startup.
         self.create_timer(self.omnibase.battery_check_period, self.check_battery)
 
-
     def parameters_callback(self, params) -> SetParametersResult:
         """When a ROS parameter is changed, this method will be called to verify the change and accept/deny it."""
         success = False
@@ -424,9 +419,7 @@ class ZuuuHAL(Node):
 
         if request.mode in [m.name for m in ZuuuModes]:
             if request.mode == ZuuuModes.SPEED.name:
-                self.get_logger().info(
-                    f"'{request.mode}' should not be changed by hand, use the SetSpeed service instead"
-                )
+                self.get_logger().info(f"'{request.mode}' should not be changed by hand, use the SetSpeed service instead")
             elif request.mode == ZuuuModes.GOTO.name:
                 self.get_logger().info(
                     f"'{request.mode}' should not be changed by hand, use the ZuuuGotoActionServer action server instead"
@@ -663,8 +656,6 @@ class ZuuuHAL(Node):
         self.y_odom_gazebo = msg.pose.pose.position.y
         q = msg.pose.pose.orientation
         _, _, self.theta_odom_gazebo = tf_transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
-
-
 
     def filter_speed_goals(self, x_vel, y_vel, theta_vel):
         """Applies a smoothing filter"""
@@ -1001,7 +992,6 @@ class ZuuuHAL(Node):
     def stop_ongoing_services(self) -> None:
         """Stops the SetSpeed service, if it was running"""
         self.speed_service_on = False
-
 
     def handle_joy_discretization(self, dx, dy, dtheta, almost_zero=0.001, nb_directions=8):
         if abs(dx) < almost_zero and abs(dy) < almost_zero:

@@ -1,6 +1,7 @@
-from pyvesc.VESC import MultiVESC
-from typing import Deque, Optional, Any
 from collections import deque
+from typing import Any, Deque, Optional
+
+from pyvesc.VESC import MultiVESC
 
 
 class MobileBase:
@@ -50,9 +51,7 @@ class MobileBase:
         self.back_wheel_rpm_deque: Deque[float] = deque(maxlen=10)
 
         # Initialize measurements depending on whether hardware is fake.
-        init_measurements_value: Optional[str] = (
-            "No measurements in fake_hardware mode" if fake_hardware else None
-        )
+        init_measurements_value: Optional[str] = "No measurements in fake_hardware mode" if fake_hardware else None
         self.left_wheel_measurements: Optional[Any] = init_measurements_value
         self.right_wheel_measurements: Optional[Any] = init_measurements_value
         self.back_wheel_measurements: Optional[Any] = init_measurements_value

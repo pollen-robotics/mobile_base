@@ -7,7 +7,6 @@ import rclpy
 from action_msgs.msg import GoalStatus
 from rclpy.action import ActionClient
 from rclpy.node import Node
-
 from zuuu_interfaces.action import ZuuuGoto
 
 

@@ -11,9 +11,9 @@ from rclpy.callback_groups import \
     MutuallyExclusiveCallbackGroup  # ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+from zuuu_interfaces.action import ZuuuGoto
 
 from zuuu_hal.utils import PID, ZuuuControlModes, ZuuuModes, angle_diff
-from zuuu_interfaces.action import ZuuuGoto
 
 
 class ZuuuGotoActionServer(Node):
