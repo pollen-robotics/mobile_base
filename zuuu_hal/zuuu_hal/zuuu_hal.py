@@ -639,7 +639,7 @@ class ZuuuHAL(Node):
 
         # LIDAR safety management
         self.lidar_safety.clear_measures()
-        if self.safety_on:
+        if self.safety_on:            
             self.lidar_safety.process_scan(filtered_scan)
         # Publishing the safety image
         lidar_img = self.lidar_safety.create_safety_img(filtered_scan)
