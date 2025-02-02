@@ -269,43 +269,44 @@ class ZuuuHAL(Node):
     def _init_state_variables(self) -> None:
         # Initialize state variables.
         self.cmd_vel: Optional[Twist] = None
-        self.x_odom = 0.0
-        self.y_odom = 0.0
-        self.theta_odom = 0.0
-        self.x_odom_gazebo = 0.0
-        self.y_odom_gazebo = 0.0
-        self.theta_odom_gazebo = 0.0
-        self.x_odom_gazebo_old = 0.0
-        self.y_odom_gazebo_old = 0.0
-        self.theta_odom_gazebo_old = 0.0
-        self.theta_zuuu_vs_gazebo = 0.0
-        self.vx = 0.0
-        self.vy = 0.0
-        self.vtheta = 0.0
-        self.vx_gazebo = 0.0
-        self.vy_gazebo = 0.0
-        self.vtheta_gazebo = 0.0
-        self.x_vel_goal = 0.0
-        self.y_vel_goal = 0.0
-        self.theta_vel_goal = 0.0
-        self.x_vel_goal_filtered = 0.0
-        self.y_vel_goal_filtered = 0.0
-        self.theta_vel_goal_filtered = 0.0
-        self.x_goal = 0.0
-        self.y_goal = 0.0
-        self.theta_goal = 0.0
-        self.calculated_wheel_speeds = [0.0, 0.0, 0.0]
-        self.reset_odom = False
-        self.battery_voltage = 25.0
-        self.mode = ZuuuModes.CMD_GOTO  # or ZuuuModes.CMD_VEL as needed
-        self.speed_service_deadline = 0
-        self.speed_service_on = False
-        self.lidar_mandatory = False
-        self.scan_is_read = False
-        self.scan_timeout = 0.5
-        self.nb_control_ticks = 0
-        self.stationary_on = False
-        self.already_shutdown = False
+        self.x_odom: float = 0.0
+        self.y_odom: float = 0.0
+        self.theta_odom: float = 0.0
+        self.x_odom_gazebo: float = 0.0
+        self.y_odom_gazebo: float = 0.0
+        self.theta_odom_gazebo: float = 0.0
+        self.x_odom_gazebo_old: float = 0.0
+        self.y_odom_gazebo_old: float = 0.0
+        self.theta_odom_gazebo_old: float = 0.0
+        self.theta_zuuu_vs_gazebo: float = 0.0
+        self.vx: float = 0.0
+        self.vy: float = 0.0
+        self.vtheta: float = 0.0
+        self.vx_gazebo: float = 0.0
+        self.vy_gazebo: float = 0.0
+        self.vtheta_gazebo: float = 0.0
+        self.x_vel_goal: float = 0.0
+        self.y_vel_goal: float = 0.0
+        self.theta_vel_goal: float = 0.0
+        self.x_vel_goal_filtered: float = 0.0
+        self.y_vel_goal_filtered: float = 0.0
+        self.theta_vel_goal_filtered: float = 0.0
+        self.x_goal: float = 0.0
+        self.y_goal: float = 0.0
+        self.theta_goal: float = 0.0
+        self.calculated_wheel_speeds: List[float] = [0.0, 0.0, 0.0]
+        self.reset_odom: bool = False
+        self.battery_voltage: float = 25.0
+        self.mode = ZuuuModes.CMD_GOTO  # or CMD_VEL as preferred
+        self.speed_service_deadline: float = 0.0
+        self.speed_service_on: bool = False
+        self.lidar_mandatory: bool = False
+        self.scan_is_read: bool = False
+        self.scan_timeout: float = 0.5
+        self.nb_control_ticks: int = 0
+        self.stationary_on: bool = False
+        self.already_shutdown: bool = False
+        self.nb_full_com_fails: int = 0
 
         self.lidar_safety = LidarSafety(
             self.safety_distance,
@@ -316,6 +317,7 @@ class ZuuuHAL(Node):
             fake_hardware=self.fake_hardware,
         )
         self.cv_bridge = CvBridge()
+
 
     def _init_pid_controllers(self) -> None:
         """
