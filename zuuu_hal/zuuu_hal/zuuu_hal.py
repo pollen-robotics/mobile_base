@@ -326,7 +326,7 @@ class ZuuuHAL(Node):
         self.only_x = True
         self.theta_null = True
         self.joy_angle = 0.0
-        self.joy_intesity = 0.0
+        self.joy_intensity = 0.0
         self.joy_rotation_on = False
         self.save_odom_checkpoint_xy()
         self.save_odom_checkpoint_theta()
@@ -1061,6 +1061,7 @@ class ZuuuHAL(Node):
         dy = self.y_odom - self.y_goal
         distance_error = math.sqrt(dx**2 + dy**2)
         angle_error = self.theta_odom - self.theta_goal
+        self.get_logger().info(f"angle error: {angle_error:.2f}, self.theta_goal: {self.theta_goal:.2f}, self.theta_odom: {self.theta_odom:.2f}")
 
         dist_command = distance_pid.tick(distance_error)
         if not shortest_angle:
@@ -1099,6 +1100,7 @@ class ZuuuHAL(Node):
             self.x_vel_goal = self.cmd_vel.linear.x
             self.y_vel_goal = self.cmd_vel.linear.y
             self.theta_vel_goal = self.cmd_vel.angular.z
+            self.get_logger().info(f"theta_vel_goal={self.theta_vel_goal:.2f}")
             self.fake_vel_goals_to_goto_goals(self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal)
             self.goto_tick(shortest_angle=False, distance_pid=self.distance_pid_cmd_goto, angle_pid=self.angle_pid_cmd_goto)
         else:
@@ -1122,12 +1124,12 @@ class ZuuuHAL(Node):
         if abs(dx) < almost_zero and abs(dy) < almost_zero:
             rotation_on = False
             angle = 0
-            intesity = 0
+            intensity = 0
             is_stationary = True
         else:
             is_stationary = False
             joy_angle = math.atan2(dy, dx)
-            intesity = math.sqrt(dx**2 + dy**2)
+            intensity = math.sqrt(dx**2 + dy**2)
             angle_step = math.pi * 2 / nb_directions
             half_angle_step = angle_step / 2
             found = False
@@ -1155,12 +1157,12 @@ class ZuuuHAL(Node):
         else:
             rotation_changed = False
         self.joy_angle = angle
-        self.joy_intesity = intesity
+        self.joy_intensity = intensity
         self.joy_rotation_on = rotation_on
 
         return (
             angle,
-            intesity,
+            intensity,
             rotation_on,
             direction_changed,
             rotation_changed,
@@ -1209,7 +1211,7 @@ class ZuuuHAL(Node):
         dx = x_vel_goal
         dy = y_vel_goal
         dtheta = theta_vel_goal
-        # # V0 no smart correction, everything is open
+        # # V0 no smart correction, everything is open, this should be almost equivalent to CMD_VEL
         # self.theta_goal = self.theta_odom+dtheta
         # self.x_goal = self.x_odom+(dx * math.cos(self.theta_odom) - dy*math.sin(self.theta_odom))
         # self.y_goal = self.y_odom+(dx * math.sin(self.theta_odom) + dy*math.cos(self.theta_odom))
@@ -1241,7 +1243,7 @@ class ZuuuHAL(Node):
             joy_angle_odom_frame = joy_angle + self.theta_odom
             self.save_direction_checkpoint(joy_angle_odom_frame)
         else:
-            # Controling to reach the stable goal position (strong disturbance rejection)
+            # Controlling to reach the stable goal position (strong disturbance rejection)
             self.theta_goal = self.theta_odom_checkpoint
 
         if direction_changed:
