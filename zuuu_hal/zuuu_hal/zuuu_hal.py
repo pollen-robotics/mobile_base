@@ -78,7 +78,7 @@ class ZuuuHAL(Node):
         self._init_services()
         self._init_transform_broadcaster()
         self._init_misc_timers()
-
+        
     # -------------------------------------------------------------------------
     # Private initialization helper methods.
     # -------------------------------------------------------------------------
@@ -844,7 +844,7 @@ class ZuuuHAL(Node):
             f = 0.0
         else:
             f = 1.0 / dt
-        self.get_logger().info("zuuu tick potential freq: {f:.0f}Hz (dt={1000 * dt:.0f}ms)")
+        self.get_logger().info(f"zuuu tick potential freq: {f:.0f}Hz (dt={1000 * dt:.0f}ms)")
 
     def stop_ongoing_services(self) -> None:
         """Stops the SetSpeed service, if it was running"""
@@ -971,7 +971,7 @@ class ZuuuHAL(Node):
 
             # Local speeds in egocentric frame deduced from the wheel speeds
             # "rpm" are actually erpm and need to be divided by half the amount of magnetic poles to get the actual rpm.
-            pole_factor = self.omnibase.half_poles
+            pole_factor = 1/self.omnibase.half_poles
             x_vel, y_vel, theta_vel = dk_vel(
                 self.omnibase.left_wheel_rpm * pole_factor,
                 self.omnibase.right_wheel_rpm * pole_factor,
@@ -1034,6 +1034,7 @@ class ZuuuHAL(Node):
             self.theta_vel_goal = self.cmd_vel.angular.z
         else:
             self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = 0.0, 0.0, 0.0
+            
 
     def speed_mode_tick(self) -> None:
         """Tick function for the speed mode. Will only set the speeds to 0 if the duration is over."""
@@ -1362,7 +1363,6 @@ class ZuuuHAL(Node):
         if self.first_tick:
             self.first_tick = False
             self.get_logger().info("=> Zuuu HAL up and running! **")
-        self.get_logger().info("main_tick!!! **")
 
         self.measurements_tick(verbose)
 
@@ -1370,7 +1370,6 @@ class ZuuuHAL(Node):
         
         self.control_tick()
         
-
         if verbose:
             self.print_loop_freq(t)
 
@@ -1379,11 +1378,11 @@ def main(args=None) -> None:
     """Run ZuuuHAL main loop"""
     try:
         rclpy.init(args=args)
-
+        
         callback_group = (
             MutuallyExclusiveCallbackGroup()
         )  # ReentrantCallbackGroup() brings bad memories, avoiding it if possible
-
+        
         zuuu_hal = ZuuuHAL(callback_group)
 
         mult_executor = MultiThreadedExecutor()
