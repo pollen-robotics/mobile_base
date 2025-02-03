@@ -686,13 +686,13 @@ class ZuuuHAL(Node):
 
     def publish_odometry_and_tf(self) -> None:
         """Publishes the current odometry position (Odometry type published on the /odom topic) and also
-        published the TransformStamped between the frame base_footprint and odom
+        published the TransformStamped between the frame base_link and odom
         """
         # Odom
         odom = Odometry()
         odom.header.frame_id = "odom_zuuu"
         odom.header.stamp = self.measure_timestamp.to_msg()
-        odom.child_frame_id = "base_footprint"
+        odom.child_frame_id = "base_link"
         odom.pose.pose.position.x = self.x_odom
         odom.pose.pose.position.y = self.y_odom
         odom.pose.pose.position.z = 0.0
@@ -715,7 +715,7 @@ class ZuuuHAL(Node):
         t = TransformStamped()
         t.header.stamp = self.measure_timestamp.to_msg()
         t.header.frame_id = "odom"
-        t.child_frame_id = "base_footprint"
+        t.child_frame_id = "base_link"
 
         t.transform.translation.x = self.x_odom
         t.transform.translation.y = self.y_odom
@@ -1362,12 +1362,14 @@ class ZuuuHAL(Node):
         if self.first_tick:
             self.first_tick = False
             self.get_logger().info("=> Zuuu HAL up and running! **")
-
-        self.control_tick()
+        self.get_logger().info("main_tick!!! **")
 
         self.measurements_tick(verbose)
 
         self.odom_tick()
+        
+        self.control_tick()
+        
 
         if verbose:
             self.print_loop_freq(t)

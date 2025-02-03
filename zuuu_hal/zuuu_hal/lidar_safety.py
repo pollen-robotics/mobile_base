@@ -183,14 +183,14 @@ class LidarSafety:
     def dist_to_point(self, r: float, angle: float) -> Tuple[float, float, float]:
         """Calculates the distance between a LIDAR point and the robot's center.
 
-        Converts the point from the LIDAR frame to the base_footprint frame.
+        Converts the point from the LIDAR frame to the base_link frame.
 
         Args:
             r (float): Range reading from the LIDAR.
             angle (float): Angle of the LIDAR reading.
 
         Returns:
-            Tuple[float, float, float]: (distance, x, y) where x and y are the coordinates in the base_footprint frame.
+            Tuple[float, float, float]: (distance, x, y) where x and y are the coordinates in the base_link frame.
         """
         x = r * math.cos(angle)
         y = r * math.sin(angle)
