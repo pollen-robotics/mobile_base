@@ -711,7 +711,9 @@ class ZuuuHAL(Node):
             odom.pose.covariance = np.diag([1e-2, 1e-2, 1e-2, 1e3, 1e3, 1e-1]).ravel()
             odom.twist.covariance = np.diag([1e-2, 1e3, 1e3, 1e3, 1e3, 1e-2]).ravel()
             self.pub_odom.publish(odom)
-
+        else :
+            q = tf_transformations.quaternion_from_euler(0.0, 0.0, self.theta_odom_gazebo)
+            
         # TF
         t = TransformStamped()
         t.header.stamp = self.measure_timestamp.to_msg()
