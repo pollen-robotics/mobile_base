@@ -1065,7 +1065,7 @@ class ZuuuHAL(Node):
         dy = self.y_odom - self.y_goal
         distance_error = math.sqrt(dx**2 + dy**2)
         angle_error = self.theta_odom - self.theta_goal
-        self.get_logger().info(f"angle error: {angle_error:.2f}, self.theta_goal: {self.theta_goal:.2f}, self.theta_odom: {self.theta_odom:.2f}")
+        # self.get_logger().info(f"angle error: {angle_error:.2f}, self.theta_goal: {self.theta_goal:.2f}, self.theta_odom: {self.theta_odom:.2f}")
 
         dist_command = distance_pid.tick(distance_error)
         if not shortest_angle:
@@ -1111,7 +1111,7 @@ class ZuuuHAL(Node):
             self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = 0.0, 0.0, 0.0
 
     def reset_odom_now(self):
-        if self.mode is ZuuuModes.GOTO and self.goto_action_server.has_active_goals():
+        if self.mode is ZuuuModes.GOTO:
             # Resetting the odometry while a GoTo is ON might be dangerous. Stopping it to make sure:
             self.get_logger().warning("Resetting the odometry while a GoTo is ON. Setting the mode to BRAKE for safety.")
             self.mode = ZuuuModes.BRAKE
@@ -1396,7 +1396,6 @@ def main(args=None) -> None:
         rate = zuuu_hal.create_rate(2.0)
 
         while rclpy.ok():
-            rclpy.logging._root_logger.info("tick")
             rate.sleep()
     except KeyboardInterrupt:
         # rclpy.logging._root_logger.error(traceback.format_exc())
