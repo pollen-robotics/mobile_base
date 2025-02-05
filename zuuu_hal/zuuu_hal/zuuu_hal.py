@@ -29,7 +29,7 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile, ReliabilityPolicy
-from reachy_utils.config import ReachyConfig
+from reachy_config import ReachyConfig
 from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import Float32
 from tf2_ros import TransformBroadcaster
@@ -94,8 +94,8 @@ class ZuuuHAL(Node):
 
     def _init_version_and_omnibase(self) -> None:
         # Read version from configuration.
-        reachy_config = ReachyConfig()
-        self.zuuu_version: str = reachy_config.mobile_base_config["version_hard"]
+        reachy_config = ReachyConfig(no_print=True)
+        self.zuuu_version: str = reachy_config.mobile_base["version_hard"]
         self.get_logger().info(f"zuuu version: {self.zuuu_version}")
 
         try:
