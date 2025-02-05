@@ -17,12 +17,8 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     # Path finding (peak comedy)
-    pkg_share = launch_ros.substitutions.FindPackageShare(
-        package="zuuu_description"
-    ).find("zuuu_description")
-    zuuu_nav2_config_pkg_share = launch_ros.substitutions.FindPackageShare(
-        package="zuuu_nav2_config"
-    ).find("zuuu_nav2_config")
+    pkg_share = launch_ros.substitutions.FindPackageShare(package="zuuu_description").find("zuuu_description")
+    zuuu_nav2_config_pkg_share = launch_ros.substitutions.FindPackageShare(package="zuuu_nav2_config").find("zuuu_nav2_config")
 
     # Launch arguments
     arguments = [
@@ -36,23 +32,13 @@ def generate_launch_description():
     # Launch files to call
     launches = [
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(pkg_share, "launch", "gazebo_simulation.launch.py")
-            ),
+            PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "gazebo_simulation.launch.py")),
         ),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(
-                    zuuu_nav2_config_pkg_share, "launch", "navigation.launch.py"
-                )
-            ),
+            PythonLaunchDescriptionSource(os.path.join(zuuu_nav2_config_pkg_share, "launch", "navigation.launch.py")),
         ),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(
-                    zuuu_nav2_config_pkg_share, "launch", "rviz_navigation.launch.py"
-                )
-            ),
+            PythonLaunchDescriptionSource(os.path.join(zuuu_nav2_config_pkg_share, "launch", "rviz_navigation.launch.py")),
         ),
     ]
 

@@ -17,9 +17,7 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     # Path finding (peak comedy)
-    pkg_share = launch_ros.substitutions.FindPackageShare(
-        package="zuuu_nav2_config"
-    ).find("zuuu_nav2_config")
+    pkg_share = launch_ros.substitutions.FindPackageShare(package="zuuu_nav2_config").find("zuuu_nav2_config")
     default_rviz_config_path = os.path.join(pkg_share, "rviz/mapping.rviz")
     # rviz_config_dir = os.path.join(
     #     get_package_share_directory('rplidar_ros2'),
@@ -48,14 +46,10 @@ def generate_launch_description():
     # Launch files to call
     launches = [
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(pkg_share, "launch", "zuuu_bringup.launch.py")
-            ),
+            PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "zuuu_bringup.launch.py")),
         ),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(pkg_share, "launch", "mapping.launch.py")
-            ),
+            PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "mapping.launch.py")),
         ),
     ]
 

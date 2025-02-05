@@ -17,12 +17,8 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     # Path finding (peak comedy)
-    pkg_share = launch_ros.substitutions.FindPackageShare(
-        package="zuuu_description"
-    ).find("zuuu_description")
-    zuuu_nav2_config_pkg_share = launch_ros.substitutions.FindPackageShare(
-        package="zuuu_nav2_config"
-    ).find("zuuu_nav2_config")
+    pkg_share = launch_ros.substitutions.FindPackageShare(package="zuuu_description").find("zuuu_description")
+    zuuu_nav2_config_pkg_share = launch_ros.substitutions.FindPackageShare(package="zuuu_nav2_config").find("zuuu_nav2_config")
 
     pkg_gazebo_ros = get_package_share_directory("gazebo_ros")
     # pkg_gazebo_ros = get_package_share_directory("reachy_gazebo")
@@ -34,9 +30,7 @@ def generate_launch_description():
         [
             PathJoinSubstitution([FindExecutable(name="xacro")]),
             " ",
-            PathJoinSubstitution(
-                [FindPackageShare("zuuu_description"), "urdf", "zuuu.urdf.xacro"]
-            ),
+            PathJoinSubstitution([FindPackageShare("zuuu_description"), "urdf", "zuuu.urdf.xacro"]),
             " ",
             "use_gazebo:=true",
             " ",
@@ -148,36 +142,24 @@ def generate_launch_description():
     # Launch files to call
     launches = [
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(pkg_gazebo_ros, "launch", "gzserver.launch.py")
-            ),
-
-        launch_arguments={
-            "verbose": "false",
-            "pause": "false",
-            "world": [FindPackageShare("reachy_gazebo"), "/worlds/empty.world"],
-        }.items(),
+            PythonLaunchDescriptionSource(os.path.join(pkg_gazebo_ros, "launch", "gzserver.launch.py")),
+            launch_arguments={
+                "verbose": "false",
+                "pause": "false",
+                "world": [FindPackageShare("reachy_gazebo"), "/worlds/empty.world"],
+            }.items(),
         ),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(pkg_gazebo_ros, "launch", "gzclient.launch.py")
-            ),
+            PythonLaunchDescriptionSource(os.path.join(pkg_gazebo_ros, "launch", "gzclient.launch.py")),
         ),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(pkg_gazebo_ros, "launch", "gazebo.launch.py")
-            ),
+            PythonLaunchDescriptionSource(os.path.join(pkg_gazebo_ros, "launch", "gazebo.launch.py")),
             launch_arguments={"verbose": "true"}.items(),
         ),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(pkg_share, "launch", "rviz_bringup.launch.py")
-            ),
+            PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "rviz_bringup.launch.py")),
         ),
     ]
-
-
-
 
     return LaunchDescription(arguments + launches + nodes)
 

@@ -13,30 +13,22 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration("use_sim_time", default="true")
     map_path = LaunchConfiguration(
         "map",
-        default=os.path.join(
-            get_package_share_directory("zuuu_nav2_config"), "maps", MAP_NAME + ".yaml"
-        ),
+        default=os.path.join(get_package_share_directory("zuuu_nav2_config"), "maps", MAP_NAME + ".yaml"),
     )
 
     param_file_name = "nav2_params.yaml"
     param_path = LaunchConfiguration(
         "params_file",
-        default=os.path.join(
-            get_package_share_directory("zuuu_nav2_config"), "config/", param_file_name
-        ),
+        default=os.path.join(get_package_share_directory("zuuu_nav2_config"), "config/", param_file_name),
     )
 
     bt_file_name = "zuuu_bt.xml"
     bt_path = LaunchConfiguration(
         "bt_file",
-        default=os.path.join(
-            get_package_share_directory("zuuu_nav2_config"), "config/", bt_file_name
-        ),
+        default=os.path.join(get_package_share_directory("zuuu_nav2_config"), "config/", bt_file_name),
     )
 
-    nav2_launch_file_dir = os.path.join(
-        get_package_share_directory("nav2_bringup"), "launch"
-    )
+    nav2_launch_file_dir = os.path.join(get_package_share_directory("nav2_bringup"), "launch")
 
     return LaunchDescription(
         [
@@ -61,9 +53,7 @@ def generate_launch_description():
                 description="Full path to the behavior tree xml file to use",
             ),
             IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    [nav2_launch_file_dir, "/bringup_launch.py"]
-                ),
+                PythonLaunchDescriptionSource([nav2_launch_file_dir, "/bringup_launch.py"]),
                 launch_arguments={
                     "map": map_path,
                     "use_sim_time": use_sim_time,
