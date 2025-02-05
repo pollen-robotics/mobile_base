@@ -15,9 +15,7 @@ def generate_launch_description():
     param_file_name = "slam.yaml"
     param_dir = LaunchConfiguration(
         "parameters",
-        default=os.path.join(
-            get_package_share_directory("zuuu_nav2_config"), "config/", param_file_name
-        ),
+        default=os.path.join(get_package_share_directory("zuuu_nav2_config"), "config/", param_file_name),
     )
 
     print(

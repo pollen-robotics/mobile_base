@@ -23,7 +23,9 @@ from geometry_msgs.msg import TransformStamped, Twist
 from nav_msgs.msg import Odometry
 from pollen_msgs.msg import MobileBaseState
 from rcl_interfaces.msg import SetParametersResult
-from rclpy.callback_groups import CallbackGroup, MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
+from rclpy.callback_groups import (CallbackGroup,
+                                   MutuallyExclusiveCallbackGroup,
+                                   ReentrantCallbackGroup)
 from rclpy.constants import S_TO_NS
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
@@ -33,23 +35,17 @@ from reachy_config import ReachyConfig
 from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import Float32
 from tf2_ros import TransformBroadcaster
-from zuuu_interfaces.srv import (
-    DistanceToGoal,
-    GetBatteryVoltage,
-    GetOdometry,
-    GetZuuuMode,
-    GetZuuuSafety,
-    ResetOdometry,
-    SetSpeed,
-    SetZuuuMode,
-    SetZuuuSafety,
-)
 
-from zuuu_hal.kinematics import dk_vel, ik_vel, pwm_to_wheel_rot_speed, wheel_rot_speed_to_pwm
+from zuuu_hal.kinematics import (dk_vel, ik_vel, pwm_to_wheel_rot_speed,
+                                 wheel_rot_speed_to_pwm)
 from zuuu_hal.lidar_safety import LidarSafety
 from zuuu_hal.mobile_base import MobileBase
 from zuuu_hal.utils import PID, ZuuuControlModes, ZuuuModes, angle_diff, sign
 from zuuu_hal.zuuu_goto_action_server import ZuuuGotoActionServer
+from zuuu_interfaces.srv import (DistanceToGoal, GetBatteryVoltage,
+                                 GetOdometry, GetZuuuMode, GetZuuuSafety,
+                                 ResetOdometry, SetSpeed, SetZuuuMode,
+                                 SetZuuuSafety)
 
 
 class ZuuuHAL(Node):
@@ -78,7 +74,7 @@ class ZuuuHAL(Node):
         self._init_services()
         self._init_transform_broadcaster()
         self._init_misc_timers()
-        
+
     # -------------------------------------------------------------------------
     # Private initialization helper methods.
     # -------------------------------------------------------------------------
@@ -711,9 +707,9 @@ class ZuuuHAL(Node):
             odom.pose.covariance = np.diag([1e-2, 1e-2, 1e-2, 1e3, 1e3, 1e-1]).ravel()
             odom.twist.covariance = np.diag([1e-2, 1e3, 1e3, 1e3, 1e3, 1e-2]).ravel()
             self.pub_odom.publish(odom)
-        else :
+        else:
             q = tf_transformations.quaternion_from_euler(0.0, 0.0, self.theta_odom_gazebo)
-            
+
         # TF
         t = TransformStamped()
         t.header.stamp = self.measure_timestamp.to_msg()
@@ -974,7 +970,7 @@ class ZuuuHAL(Node):
 
             # Local speeds in egocentric frame deduced from the wheel speeds
             # "rpm" are actually erpm and need to be divided by half the amount of magnetic poles to get the actual rpm.
-            pole_factor = 1/self.omnibase.half_poles
+            pole_factor = 1 / self.omnibase.half_poles
             x_vel, y_vel, theta_vel = dk_vel(
                 self.omnibase.left_wheel_rpm * pole_factor,
                 self.omnibase.right_wheel_rpm * pole_factor,
@@ -1037,7 +1033,6 @@ class ZuuuHAL(Node):
             self.theta_vel_goal = self.cmd_vel.angular.z
         else:
             self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = 0.0, 0.0, 0.0
-            
 
     def speed_mode_tick(self) -> None:
         """Tick function for the speed mode. Will only set the speeds to 0 if the duration is over."""
@@ -1370,9 +1365,9 @@ class ZuuuHAL(Node):
         self.measurements_tick(verbose)
 
         self.odom_tick()
-        
+
         self.control_tick()
-        
+
         if verbose:
             self.print_loop_freq(t)
 
@@ -1381,11 +1376,11 @@ def main(args=None) -> None:
     """Run ZuuuHAL main loop"""
     try:
         rclpy.init(args=args)
-        
+
         callback_group = (
             MutuallyExclusiveCallbackGroup()
         )  # ReentrantCallbackGroup() brings bad memories, avoiding it if possible
-        
+
         zuuu_hal = ZuuuHAL(callback_group)
 
         mult_executor = MultiThreadedExecutor()

@@ -16,9 +16,7 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    pkg_share = launch_ros.substitutions.FindPackageShare(
-        package="zuuu_nav2_config"
-    ).find("zuuu_nav2_config")
+    pkg_share = launch_ros.substitutions.FindPackageShare(package="zuuu_nav2_config").find("zuuu_nav2_config")
     default_rviz_config_path = os.path.join(pkg_share, "rviz/navigation.rviz")
 
     use_sim_time = LaunchConfiguration("use_sim_time", default="true")
