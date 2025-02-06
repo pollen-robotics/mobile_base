@@ -80,11 +80,19 @@ class ZuuuHAL(Node):
     # -------------------------------------------------------------------------
 
     def _init_fake_hardware(self) -> None:
-        self.declare_parameter("fake_hardware", False)
-        self.fake_hardware: bool = self.get_parameter("fake_hardware").value
+        self.declare_parameter("fake", False)
+        self.declare_parameter("gazebo", False)
 
-        if self.fake_hardware:
-            self.get_logger().info("Running zuuu_hal in fake hardware mode\n")
+        self.fake_mode: bool = self.get_parameter("fake").value
+        self.gazebo_mode: bool = self.get_parameter("gazebo").value
+        self.fake_hardware: bool = self.gazebo_mode
+
+        if self.fake_mode and not self.gazebo_mode:
+            msg = "A mobile base is declared in the config but zuuu_hal does not support FAKE mode.\n"
+            msg += "Please set the mobile_base parameter 'enabled' to 'false' in the config file when using FAKE mode. Shutting down zuuu_hal."
+            raise RuntimeError(msg)
+        elif self.gazebo_mode:
+            self.get_logger().info("Running zuuu_hal in fake hardware mode - GAZEBO\n")
         else:
             self.get_logger().info("Running zuuu_hal on physical hardware\n")
 
@@ -1396,9 +1404,10 @@ def main(args=None) -> None:
         # rclpy.logging._root_logger.error(traceback.format_exc())
         rclpy.logging._root_logger.error("KeyboardInterrupt in zuuu_hal")
     finally:
-        zuuu_hal.emergency_shutdown("Default zuuu_hal shutdown")
+        if "zuuu_hal" in locals():
+            zuuu_hal.emergency_shutdown("Default zuuu_hal shutdown")
+            executor_thread.join()
         rclpy.shutdown()
-        executor_thread.join()
 
 
 if __name__ == "__main__":
