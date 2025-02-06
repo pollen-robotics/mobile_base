@@ -88,10 +88,8 @@ class ZuuuHAL(Node):
         self.fake_hardware: bool = self.gazebo_mode
 
         if self.fake_mode and not self.gazebo_mode:
-            msg = "\n\n****************************************************** ERROR **************************************************************\n"
-            msg += "A mobile base is declared in the config but zuuu_hal does not support FAKE mode.\n"
-            msg += "Please set the mobile_base parameter 'enable' to 'false' in the config file when using FAKE mode. Shutting down zuuu_hal.\n"
-            msg += "***************************************************************************************************************************\n\n\n"
+            msg = "A mobile base is declared in the config but zuuu_hal does not support FAKE mode.\n"
+            msg += "Please set the mobile_base parameter 'enable' to 'false' in the config file when using FAKE mode. Shutting down zuuu_hal."
             raise RuntimeError(msg)
         elif self.gazebo_mode:
             self.get_logger().info("Running zuuu_hal in fake hardware mode - GAZEBO")
@@ -1406,10 +1404,10 @@ def main(args=None) -> None:
         # rclpy.logging._root_logger.error(traceback.format_exc())
         rclpy.logging._root_logger.error("KeyboardInterrupt in zuuu_hal")
     finally:
-        if "zuuu_hal" in locals():
-            zuuu_hal.emergency_shutdown("Default zuuu_hal shutdown")
-            executor_thread.join()
+        zuuu_hal.emergency_shutdown("Default zuuu_hal shutdown")
         rclpy.shutdown()
+        executor_thread.join()
+
 
 
 if __name__ == "__main__":
