@@ -289,7 +289,7 @@ class ZuuuHAL(Node):
         self.pub_left_wheel_rpm = self.create_publisher(Float32, "left_wheel_rpm", 2)
         self.pub_right_wheel_rpm = self.create_publisher(Float32, "right_wheel_rpm", 2)
         self.pub_mobile_base_state = self.create_publisher(MobileBaseState, "mobile_base_state", 2)
-        self.pub_odom = self.create_publisher(Odometry, "odom_zuuu", 2)
+        self.pub_odom = self.create_publisher(Odometry, "odom", 2)
         self.pub_fake_vel = self.create_publisher(Twist, "cmd_vel_gazebo", 10)
 
     def _init_services(self) -> None:
@@ -687,7 +687,7 @@ class ZuuuHAL(Node):
         # Odom
         if not self.fake_hardware:
             odom = Odometry()
-            odom.header.frame_id = "odom_zuuu"
+            odom.header.frame_id = "odom"
             odom.header.stamp = self.measure_timestamp.to_msg()
             odom.child_frame_id = "base_link"
             odom.pose.pose.position.x = self.x_odom
