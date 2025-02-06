@@ -92,11 +92,13 @@ class ZuuuHAL(Node):
         self.fake_hardware: bool = self.gazebo_mode
 
         if self.fake_mode and not self.gazebo_mode:
-            msg = "A mobile base is declared in the config but zuuu_hal does not support FAKE mode.\n"
-            msg += "Please set the mobile_base parameter 'enabled' to 'false' in the config file when using FAKE mode. Shutting down zuuu_hal."
+            msg = "\n\n****************************************************** ERROR **************************************************************\n"
+            msg += "A mobile base is declared in the config but zuuu_hal does not support FAKE mode.\n"
+            msg += "Please set the mobile_base parameter 'enable' to 'false' in the config file when using FAKE mode. Shutting down zuuu_hal.\n"
+            msg += "***************************************************************************************************************************\n\n\n"
             raise RuntimeError(msg)
         elif self.gazebo_mode:
-            self.get_logger().info("Running zuuu_hal in fake hardware mode - GAZEBO\n")
+            self.get_logger().info("Running zuuu_hal in fake hardware mode - GAZEBO")
         else:
             self.get_logger().info("Running zuuu_hal on physical hardware\n")
 
