@@ -772,6 +772,9 @@ class ZuuuHAL(Node):
     def limit_vel_commands(self, x_vel, y_vel, theta_vel):
         xy_speed = math.sqrt(x_vel**2 + y_vel**2)
         if xy_speed > self.max_speed_xy:
+            self.get_logger().warning(
+                f"Requesting xy_speed ({xy_speed}) above maximum ({self.max_speed_xy}). Reducing it."
+            )
             if x_vel == 0:
                 y_vel = self.max_speed_xy
             elif y_vel == 0:
@@ -783,14 +786,11 @@ class ZuuuHAL(Node):
                 # The formula can mess up the signs, fixing them here
                 x_vel = sign(x_vel) * new_x_vel / sign(new_x_vel)
                 y_vel = sign(y_vel) * new_y_vel / sign(new_y_vel)
-            self.get_logger().warning(
-                f"Requesting xy_speed ({xy_speed}) above maximum ({self.max_speed_xy}). Reducing it."
-            )
         if abs(theta_vel) > self.max_speed_theta:
-            theta_vel = sign(theta_vel) * self.max_speed_theta
             self.get_logger().warning(
                 f"Requesting theta_speed ({theta_vel}) above maximum ({self.max_speed_theta}). Reducing it."
             )
+            theta_vel = sign(theta_vel) * self.max_speed_theta
 
         return x_vel, y_vel, theta_vel
 
