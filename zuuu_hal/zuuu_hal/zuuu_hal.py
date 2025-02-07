@@ -772,14 +772,22 @@ class ZuuuHAL(Node):
     def limit_vel_commands(self, x_vel, y_vel, theta_vel):
         xy_speed = math.sqrt(x_vel**2 + y_vel**2)
         if xy_speed > self.max_speed_xy:
-            # This formula guarantees that the ratio x_vel/y_vel remains the same , while ensuring the xy_speed is equal to max_speed_xy
-            new_x_vel = math.sqrt(self.max_speed_xy**2 / (1 + (y_vel**2) / (x_vel**2)))
-            new_y_vel = new_x_vel * y_vel / x_vel
-            # self.get_logger().warning(
-            #     f"Requesting xy_speed ({xy_speed}) above maximum ({self.max_speed_xy}). Reducing it to {math.sqrt(new_x_vel**2+new_y_vel**2)}")
-            # The formula can mess up the signs, fixing them here
-            x_vel = sign(x_vel) * new_x_vel / sign(new_x_vel)
-            y_vel = sign(y_vel) * new_y_vel / sign(new_y_vel)
+            if x_vel == 0:
+                y_vel = self.max_speed_xy
+            elif y_vel == 0:
+                x_vel = self.max_speed_xy
+            else:
+                # This formula guarantees that the ratio x_vel/y_vel remains the same , while ensuring the xy_speed is equal to max_speed_xy
+                new_x_vel = math.sqrt(self.max_speed_xy**2 / (1 + (y_vel**2) / (x_vel**2)))
+                new_y_vel = new_x_vel * y_vel / x_vel
+                # self.get_logger().warning(
+                #     f"Requesting xy_speed ({xy_speed}) above maximum ({self.max_speed_xy}). Reducing it to {math.sqrt(new_x_vel**2+new_y_vel**2)}")
+                # The formula can mess up the signs, fixing them here
+                x_vel = sign(x_vel) * new_x_vel / sign(new_x_vel)
+                y_vel = sign(y_vel) * new_y_vel / sign(new_y_vel)
+            self.get_logger().warning(
+                f"Requesting xy_speed ({xy_speed}) above maximum ({self.max_speed_xy}). Reducing it."
+            )
         if abs(theta_vel) > self.max_speed_theta:
             theta_vel = sign(theta_vel) * self.max_speed_theta
             self.get_logger().warning(
