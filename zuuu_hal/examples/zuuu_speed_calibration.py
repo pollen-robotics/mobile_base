@@ -9,7 +9,7 @@ def main():
     rclpy.init()
 
     node = rclpy.create_node("zuuu_speed_calibration")
-    pub = node.create_publisher(geometry_msgs.msg.Twist, "cmd_vel_zuuu", 10)
+    pub = node.create_publisher(geometry_msgs.msg.Twist, "cmd_vel", 10)
 
     try:
         for i in range(8):
