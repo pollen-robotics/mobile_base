@@ -242,8 +242,12 @@ class ZuuuGotoActionServer(Node):
     def check_goto_arrived(self):
         """Checks if the robot has reached the goal pose and provides the current distance and angle errors."""
         arrived = False
-        distance_to_goal = self.zuuu_hal.handle_distance_to_goal
-        if distance_to_goal.distance < self.zuuu_hal.dist_tol and abs(distance_to_goal.angle) < self.zuuu_hal.angle_tol:
-            self.get_logger().info("Reached the goal position !")
-            arrived = True
-        return arrived, distance_to_goal.distance, distance_to_goal.angle
+
+        distance_to_goal = self.zuuu_hal.compute_distance_to_goal()
+
+        if distance_to_goal is not None:
+            if distance_to_goal["distance"] < self.zuuu_hal.dist_tol and abs(distance_to_goal["delta_theta"]) < self.zuuu_hal.angle_tol:
+                self.get_logger().info("Reached the goal position !")
+                arrived = True
+        
+        return arrived, distance_to_goal["distance"], distance_to_goal["delta_theta"]

@@ -12,7 +12,7 @@ import math
 import threading
 import time
 import traceback
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 
 import numpy as np
 import rclpy
@@ -579,11 +579,20 @@ class ZuuuHAL(Node):
         self, request: DistanceToGoal.Request, response: DistanceToGoal.Response
     ) -> DistanceToGoal.Response:
         """Handle DistanceToGoal service resquest"""
-        response.delta_x = self.x_goal - self.x_odom
-        response.delta_y = self.y_goal - self.y_odom
-        response.delta_theta = angle_diff(self.theta_goal, self.theta_odom)
-        response.distance = math.sqrt((self.x_goal - self.x_odom) ** 2 + (self.y_goal - self.y_odom) ** 2)
+        distances = self.compute_distance_to_goal()
+        response.delta_x = distances["delta_x"]
+        response.delta_y = distances["delta_y"]
+        response.delta_theta = distances["delta_theta"]
+        response.distance = distances["distance"]
         return response
+    
+    def compute_distance_to_goal(self) -> Dict[str, float]:
+        distance_dict = {}
+        distance_dict["delta_x"] = self.x_goal - self.x_odom
+        distance_dict["delta_y"] = self.y_goal - self.y_odom
+        distance_dict["delta_theta"] = angle_diff(self.theta_goal, self.theta_odom)
+        distance_dict["distance"] = math.sqrt((self.x_goal - self.x_odom) ** 2 + (self.y_goal - self.y_odom) ** 2)
+        return distance_dict
 
     def handle_get_battery_voltage(
         self, request: GetBatteryVoltage.Request, response: GetBatteryVoltage.Response
