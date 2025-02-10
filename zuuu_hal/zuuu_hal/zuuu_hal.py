@@ -217,6 +217,8 @@ class ZuuuHAL(Node):
         self.x_goal: float = 0.0
         self.y_goal: float = 0.0
         self.theta_goal: float = 0.0
+        self.dist_tol: float = 0.0
+        self.angle_tol: float = 0.0
         self.calculated_wheel_speeds: List[float] = [0.0, 0.0, 0.0]
         self.reset_odom: bool = False
         self.battery_voltage: float = 25.0
@@ -1077,14 +1079,17 @@ class ZuuuHAL(Node):
         # self.get_logger().info(f"angle error: {angle_error:.2f}, self.theta_goal: {self.theta_goal:.2f}, self.theta_odom: {self.theta_odom:.2f}")
 
         dist_command = distance_pid.tick(distance_error)
-        if not shortest_angle:
-            # This version gives full control to the user
-            angle_command = angle_pid.tick(angle_error)
+        if abs(angle_error) < self.angle_tol:
+            angle_command = 0
         else:
-            # With this version the robot will rotate towards the goal with the shortest path
-            angle_command = angle_pid.tick(angle_error, is_angle=True)
+            if not shortest_angle:
+                # This version gives full control to the user
+                angle_command = angle_pid.tick(angle_error)
+            else:
+                # With this version the robot will rotate towards the goal with the shortest path
+                angle_command = angle_pid.tick(angle_error, is_angle=True)
 
-        if distance_error == 0:
+        if distance_error < self.dist_tol:
             x_command = 0
             y_command = 0
         else:

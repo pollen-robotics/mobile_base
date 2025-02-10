@@ -138,8 +138,8 @@ class ZuuuGotoActionServer(Node):
         """Setup the goto with the parameters from the request"""
         # Note: the PID values have default values in the goto_request message
         self.keep_control_on_arrival = goto_request.keep_control_on_arrival
-        self.dist_tol = goto_request.dist_tol
-        self.angle_tol = goto_request.angle_tol
+        self.zuuu_hal.dist_tol = goto_request.dist_tol
+        self.zuuu_hal.angle_tol = goto_request.angle_tol
         # Most values are stored in the zuuu_hal object as they are used in the control loop
         self.zuuu_hal.distance_pid = PID(
             p=goto_request.distance_p,
@@ -241,13 +241,9 @@ class ZuuuGotoActionServer(Node):
 
     def check_goto_arrived(self):
         """Checks if the robot has reached the goal pose and provides the current distance and angle errors."""
-        dx = self.zuuu_hal.x_odom - self.zuuu_hal.x_goal
-        dy = self.zuuu_hal.y_odom - self.zuuu_hal.y_goal
-        distance_error = math.sqrt(dx**2 + dy**2)
-
-        angle_error = self.zuuu_hal.theta_odom - self.zuuu_hal.theta_goal
         arrived = False
-        if distance_error < self.dist_tol and abs(angle_error) < self.angle_tol:
+        distance_to_goal = self.zuuu_hal.handle_distance_to_goal
+        if distance_to_goal.distance < self.zuuu_hal.dist_tol and abs(distance_to_goal.angle) < self.zuuu_hal.angle_tol:
             self.get_logger().info("Reached the goal position !")
             arrived = True
-        return arrived, distance_error, angle_error
+        return arrived, distance_to_goal.distance, distance_to_goal.angle
