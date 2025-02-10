@@ -286,7 +286,7 @@ class ZuuuHAL(Node):
             # In Gazebo mode subscribe to the odom topic published by the gazebo plugin.
             self.odom_sub = self.create_subscription(
                 Odometry,
-                "odom",
+                "odom_gazebo",
                 self.gazebo_odom_callback,
                 QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT),
             )
@@ -693,30 +693,30 @@ class ZuuuHAL(Node):
         published the TransformStamped between the frame base_link and odom
         """
         # Odom
+        odom = Odometry()
+        odom.header.frame_id = "odom"
+        odom.header.stamp = self.measure_timestamp.to_msg()
+        odom.child_frame_id = "base_link"
+        odom.pose.pose.position.x = self.x_odom
+        odom.pose.pose.position.y = self.y_odom
+        odom.pose.pose.position.z = 0.0
+        odom.twist.twist.linear.x = self.vx
+        odom.twist.twist.linear.y = self.vy
+        odom.twist.twist.angular.z = self.vtheta
+
         if not self.fake_hardware:
-            odom = Odometry()
-            odom.header.frame_id = "odom"
-            odom.header.stamp = self.measure_timestamp.to_msg()
-            odom.child_frame_id = "base_link"
-            odom.pose.pose.position.x = self.x_odom
-            odom.pose.pose.position.y = self.y_odom
-            odom.pose.pose.position.z = 0.0
-            odom.twist.twist.linear.x = self.vx
-            odom.twist.twist.linear.y = self.vy
-            odom.twist.twist.angular.z = self.vtheta
-
             q = tf_transformations.quaternion_from_euler(0.0, 0.0, self.theta_odom)
-            odom.pose.pose.orientation.x = q[0]
-            odom.pose.pose.orientation.y = q[1]
-            odom.pose.pose.orientation.z = q[2]
-            odom.pose.pose.orientation.w = q[3]
-
-            # Tune these numbers if needed
-            odom.pose.covariance = np.diag([1e-2, 1e-2, 1e-2, 1e3, 1e3, 1e-1]).ravel()
-            odom.twist.covariance = np.diag([1e-2, 1e3, 1e3, 1e3, 1e3, 1e-2]).ravel()
-            self.pub_odom.publish(odom)
         else:
             q = tf_transformations.quaternion_from_euler(0.0, 0.0, self.theta_odom_gazebo)
+        odom.pose.pose.orientation.x = q[0]
+        odom.pose.pose.orientation.y = q[1]
+        odom.pose.pose.orientation.z = q[2]
+        odom.pose.pose.orientation.w = q[3]
+
+        # Tune these numbers if needed
+        odom.pose.covariance = np.diag([1e-2, 1e-2, 1e-2, 1e3, 1e3, 1e-1]).ravel()
+        odom.twist.covariance = np.diag([1e-2, 1e3, 1e3, 1e3, 1e3, 1e-2]).ravel()
+        self.pub_odom.publish(odom)
 
         # TF
         t = TransformStamped()
