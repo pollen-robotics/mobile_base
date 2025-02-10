@@ -704,10 +704,7 @@ class ZuuuHAL(Node):
         odom.twist.twist.linear.y = self.vy
         odom.twist.twist.angular.z = self.vtheta
 
-        if not self.fake_hardware:
-            q = tf_transformations.quaternion_from_euler(0.0, 0.0, self.theta_odom)
-        else:
-            q = tf_transformations.quaternion_from_euler(0.0, 0.0, self.theta_odom_gazebo)
+        q = tf_transformations.quaternion_from_euler(0.0, 0.0, self.theta_odom)
         odom.pose.pose.orientation.x = q[0]
         odom.pose.pose.orientation.y = q[1]
         odom.pose.pose.orientation.z = q[2]
