@@ -32,12 +32,12 @@
         <gazebo>
             <plugin name="object_controller" filename="libgazebo_planar_move_plugin.so">
                 <command_topic>cmd_vel_gazebo</command_topic>
-                <odometry_topic>odom</odometry_topic>
+                <odometry_topic>odom_gazebo</odometry_topic>
                 <!-- <robot_namespace> </robot_namespace> -->
 
                 <!-- The odom info is used by zuuu_hal that publishes odom_zuuu and the TF -->
                 <publish_odom>true</publish_odom>
-                <publish_odom_tf>false</publish_odom_tf>
+                <publish_tf>false</publish_tf>
 
                 <!-- Frame IDs -->
                 <odometry_frame>odom</odometry_frame>
