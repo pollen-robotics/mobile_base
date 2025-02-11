@@ -37,7 +37,7 @@
 
                 <!-- The odom info is used by zuuu_hal that publishes odom_zuuu and the TF -->
                 <publish_odom>true</publish_odom>
-                <publish_odom_tf>false</publish_odom_tf>
+                <publish_tf>false</publish_tf>
 
                 <!-- Frame IDs -->
                 <odometry_frame>odom</odometry_frame>
