@@ -1,5 +1,6 @@
 import math
 import time
+from enum import Enum
 
 
 def angle_diff(a: float, b: float) -> float:
@@ -17,6 +18,48 @@ def sign(x: float) -> int:
         return -1
 
 
+class ZuuuModes(Enum):
+    """
+    Zuuu drive modes
+    CMD_VEL = The commands read on the topic /cmd_vel are applied after smoothing
+    BRAKE =  Sets the PWMs to 0 effectively braking the base
+    FREE_WHEEL =  Sets the current control to 0, coast mode
+    SPEED =  Mode used by the set_speed service to do speed control over arbitrary duration
+    GOTO =  Mode used by the go_to_xytheta service to do position control in odom frame
+    EMERGENCY_STOP =  Calls the emergency_shutdown method
+    CMD_GOTO = Behaves like CMD_VEL but uses the odometry to correct the commands
+    """
+
+    CMD_VEL = 1
+    BRAKE = 2
+    FREE_WHEEL = 3
+    SPEED = 4
+    GOTO = 5
+    EMERGENCY_STOP = 6
+    CMD_GOTO = 7
+
+    @classmethod
+    def speed_modes(cls):
+        """Returns a list of modes considered as speed modes."""
+        return [cls.CMD_VEL, cls.SPEED, cls.GOTO, cls.CMD_GOTO]
+
+    @classmethod
+    def stop_modes(cls):
+        """Returns a list of modes considered as stop modes."""
+        return [cls.BRAKE, cls.FREE_WHEEL, cls.EMERGENCY_STOP]
+
+
+class ZuuuControlModes(Enum):
+    """
+    Zuuu control modes
+    OPEN_LOOP = The HAL will send PWM commands to the controllers.
+    PID = The HAL will send speed commands to the controllers, the control is made by the low level PIDs
+    """
+
+    OPEN_LOOP = 1
+    PID = 2
+
+
 class PID:
     def __init__(
         self, p: float = 1.0, i: float = 0.0, d: float = 0.0, max_command: float = 10.0, max_i_contribution: float = 5.0
@@ -28,19 +71,20 @@ class PID:
             D {float} -- Differential gain (default: {0.0})
             max_command {float} -- The output command will be trimmed to +- max_command (default: {10})
             max_i_contribution {float} -- The integral contribution will be trimmed to
-                +- max_i_contribution (default: {5})
+                +- max_i_contribution. Rule of thumb: half of max_command. (default: {5})
         """
         self.p = p
         self.i = i
         self.d = d
         self.max_command = max_command
-        self.max_i_contribution = max_i_contribution
-        self.goal_value = 0
-        self.current_value = 0
 
-        self.prev_error = 0
-        self.i_contribution = 0
-        self.integral = 0
+        self.max_i_contribution = max_i_contribution
+        self.goal_value = 0.0
+        self.current_value = 0.0
+
+        self.prev_error = 0.0
+        self.i_contribution = 0.0
+        self.integral = 0.0
         self.prev_t = time.time()
 
     def set_goal(self, goal_value: float) -> None:
@@ -51,8 +95,8 @@ class PID:
 
     def reset(self) -> None:
         """Resets the integral portion, dt and the differential contribution"""
-        self.i_contribution = 0
-        self.integral = 0
+        self.i_contribution = 0.0
+        self.integral = 0.0
         self.prev_t = time.time()
         self.prev_error = self.goal_value - self.current_value
 
@@ -65,7 +109,7 @@ class PID:
         else:
             return x
 
-    def tick(self, current_value: float, is_angle: bool = False) -> None:
+    def tick(self, current_value: float, is_angle: bool = False) -> float:
         """PID calculations. If is_angle is True, then the error will be calculated as the smallest angle between
         the goal and the current_value
         Arguments:

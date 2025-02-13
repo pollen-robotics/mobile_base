@@ -1,27 +1,18 @@
-import launch
-import launch_ros
 import os
 
+import launch
+import launch_ros
 from launch import LaunchDescription
-from launch.actions import (
-    DeclareLaunchArgument,
-)
-from launch.substitutions import (
-    Command,
-    FindExecutable,
-    LaunchConfiguration,
-    PathJoinSubstitution,
-)
-
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import (Command, FindExecutable, LaunchConfiguration,
+                                  PathJoinSubstitution)
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
     # Path finding (peak comedy)
-    pkg_share = launch_ros.substitutions.FindPackageShare(
-        package="zuuu_description"
-    ).find("zuuu_description")
+    pkg_share = launch_ros.substitutions.FindPackageShare(package="zuuu_description").find("zuuu_description")
     default_model_path = os.path.join(pkg_share, "urdf/zuuu.urdf.xacro")
 
     # Paths to the robot description and its controllers
@@ -29,9 +20,7 @@ def generate_launch_description():
         [
             PathJoinSubstitution([FindExecutable(name="xacro")]),
             " ",
-            PathJoinSubstitution(
-                [FindPackageShare("zuuu_description"), "urdf", "zuuu.urdf.xacro"]
-            ),
+            PathJoinSubstitution([FindPackageShare("zuuu_description"), "urdf", "zuuu.urdf.xacro"]),
             " ",
             "use_gazebo:=false",
             " ",

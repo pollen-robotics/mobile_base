@@ -1,35 +1,53 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://ros.org/wiki/xacro">
     <xacro:macro name="zuuu_gazebo" params="model prefix">
+        <!-- <gazebo> -->
+        <!-- <plugin name="object_controller" filename="libgazebo_ros_planar_move.so"> -->
+
+        <!--         <command_topic>cmd_vel</command_topic> -->
+        <!--         <odometry_topic>odom</odometry_topic> -->
+        <!--         <!-\- <robot_namespace> </robot_namespace> -\-> -->
+
+        <!--         <!-\- The odom info is used by zuuu_hal that publishes odom_zuuu and the TF -\-> -->
+        <!--         <!-\- <publish_odom>true</publish_odom> -\-> -->
+        <!--         <publish_odom>false</publish_odom> -->
+        <!--         <!-\- <publish_odom_tf>true</publish_odom_tf> -\-> -->
+        <!--         <publish_odom_tf>false</publish_odom_tf> -->
+
+        <!--         <!-\- Frame IDs -\-> -->
+        <!--         <odometry_frame>odom</odometry_frame> -->
+        <!--         <robot_base_frame>base_link</robot_base_frame> -->
+
+        <!--         <update_rate>100</update_rate> -->
+
+        <!--         <covariance_x>0.0001</covariance_x> -->
+        <!--         <covariance_y>0.0001</covariance_y> -->
+        <!--         <covariance_yaw>0.01</covariance_yaw> -->
+
+
+        <!--     </plugin> -->
+        <!-- </gazebo> -->
+
 
         <gazebo>
-            <plugin name="object_controller" filename="libgazebo_ros_planar_move.so">
-                <!-- Caution the commandTopic field seems to be ignored, it seems to always listen to cmd_vel -->
-                <commandTopic>cmd_vel</commandTopic>
-                <odometryTopic>odom</odometryTopic>
-                <robotNamespace> </robotNamespace>
-
-                <!-- Set control loop update rate -->
-                <odometryRate>100</odometryRate>
-                <!-- Set odom publish rate -->
-                <publish_rate>100</publish_rate>
+            <plugin name="object_controller" filename="libgazebo_planar_move_plugin.so">
+                <command_topic>cmd_vel_gazebo</command_topic>
+                <odometry_topic>odom_gazebo</odometry_topic>
+                <!-- <robot_namespace> </robot_namespace> -->
 
                 <!-- The odom info is used by zuuu_hal that publishes odom_zuuu and the TF -->
                 <publish_odom>true</publish_odom>
-                <publish_odom_tf>true</publish_odom_tf>
+                <publish_tf>false</publish_tf>
 
                 <!-- Frame IDs -->
-                <odometryFrame>odom</odometryFrame>
-                <robotBaseFrame>base_link</robotBaseFrame>
+                <odometry_frame>odom</odometry_frame>
+                <robot_frame>base_link</robot_frame>
 
-                <!-- Set odom covariance -->
-
-                <covariance_x>0.0001</covariance_x>
-                <covariance_y>0.0001</covariance_y>
-                <covariance_yaw>0.01</covariance_yaw>
-
+                <update_rate>100</update_rate>
+                <!-- <control_mode> position</control_mode> -->
             </plugin>
         </gazebo>
+
 
         <gazebo reference="lidar_link">
             <sensor name="lidar" type="ray">

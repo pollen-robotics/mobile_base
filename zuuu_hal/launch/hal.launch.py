@@ -1,4 +1,5 @@
 import os
+
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
@@ -6,6 +7,7 @@ from launch.conditions import UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
 
 def generate_launch_description():
     config = os.path.join(
@@ -24,23 +26,27 @@ def generate_launch_description():
             description="Flag to enable use_sim_time",
         ),
         DeclareLaunchArgument(
-            name="fake_hardware",
+            name="fake",
             default_value="False",
-            description="Flag to indicate simulation mode",
+            description="Flag to indicate fake mode",
+        ),
+        DeclareLaunchArgument(
+            name="gazebo",
+            default_value="False",
+            description="Flag to indicate gazebo mode",
         ),
     ]
 
     # Retrieve the launch configurations
     use_sim_time = LaunchConfiguration("use_sim_time")
-    fake_hardware = LaunchConfiguration("fake_hardware")
+    fake_mode = LaunchConfiguration("fake")
+    gazebo_mode = LaunchConfiguration("gazebo")
 
     # Conditionally include the LIDAR launch file only if not in simulation mode
     launches = [
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(rplidar_launch_dir, "zuuu_rplidar_s2_launch.py")
-            ),
-            condition=UnlessCondition(fake_hardware),
+            PythonLaunchDescriptionSource(os.path.join(rplidar_launch_dir, "zuuu_rplidar_s2_launch.py")),
+            condition=UnlessCondition(fake_mode),
         ),
     ]
 
@@ -52,7 +58,7 @@ def generate_launch_description():
             name="zuuu_hal",
             parameters=[
                 config,
-                {"fake_hardware": fake_hardware, "use_sim_time": use_sim_time},
+                {"fake": fake_mode, "gazebo": gazebo_mode, "use_sim_time": use_sim_time},
             ],
         )
     ]

@@ -1,10 +1,11 @@
 import sys
-
-from zuuu_interfaces.srv import SetSpeed
-import rclpy
-from rclpy.node import Node
 import time
 import traceback
+
+import rclpy
+from rclpy.node import Node
+
+from zuuu_interfaces.srv import SetSpeed
 
 
 class SetSpeedServiceTest(Node):

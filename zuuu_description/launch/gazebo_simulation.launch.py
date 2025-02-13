@@ -1,41 +1,28 @@
-import launch
-import launch_ros
 import os
 
-from launch import LaunchDescription
-from launch import event_handlers
-from launch.actions import (
-    DeclareLaunchArgument,
-    IncludeLaunchDescription,
-    RegisterEventHandler,
-    ExecuteProcess,
-)
+import launch
+import launch_ros
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription, event_handlers
+from launch.actions import (DeclareLaunchArgument, ExecuteProcess,
+                            IncludeLaunchDescription, RegisterEventHandler)
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import (
-    Command,
-    FindExecutable,
-    LaunchConfiguration,
-    PathJoinSubstitution,
-)
-from ament_index_python.packages import get_package_share_directory
-
-
+from launch.substitutions import (Command, FindExecutable, LaunchConfiguration,
+                                  PathJoinSubstitution)
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
     # Path finding (peak comedy)
-    pkg_share = launch_ros.substitutions.FindPackageShare(
-        package="zuuu_description"
-    ).find("zuuu_description")
-    zuuu_nav2_config_pkg_share = launch_ros.substitutions.FindPackageShare(
-        package="zuuu_nav2_config"
-    ).find("zuuu_nav2_config")
+    pkg_share = launch_ros.substitutions.FindPackageShare(package="zuuu_description").find("zuuu_description")
+    zuuu_nav2_config_pkg_share = launch_ros.substitutions.FindPackageShare(package="zuuu_nav2_config").find("zuuu_nav2_config")
 
     pkg_gazebo_ros = get_package_share_directory("gazebo_ros")
+    # pkg_gazebo_ros = get_package_share_directory("reachy_gazebo")
+
     default_model_path = os.path.join(pkg_share, "urdf/zuuu.urdf.xacro")
 
     # Paths to the robot description and its controllers
@@ -43,9 +30,7 @@ def generate_launch_description():
         [
             PathJoinSubstitution([FindExecutable(name="xacro")]),
             " ",
-            PathJoinSubstitution(
-                [FindPackageShare("zuuu_description"), "urdf", "zuuu.urdf.xacro"]
-            ),
+            PathJoinSubstitution([FindPackageShare("zuuu_description"), "urdf", "zuuu.urdf.xacro"]),
             " ",
             "use_gazebo:=true",
             " ",
@@ -157,28 +142,30 @@ def generate_launch_description():
     # Launch files to call
     launches = [
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(pkg_gazebo_ros, "launch", "gzserver.launch.py")
-            ),
+            PythonLaunchDescriptionSource(os.path.join(pkg_gazebo_ros, "launch", "gzserver.launch.py")),
+            launch_arguments={
+                "verbose": "false",
+                "pause": "false",
+                "world": [FindPackageShare("reachy_gazebo"), "/worlds/empty.world"],
+            }.items(),
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(pkg_gazebo_ros, "launch", "gzclient.launch.py")),
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(pkg_gazebo_ros, "launch", "gazebo.launch.py")),
             launch_arguments={"verbose": "true"}.items(),
         ),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(pkg_gazebo_ros, "launch", "gzclient.launch.py")
-            ),
-        ),
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(pkg_share, "launch", "rviz_bringup.launch.py")
-            ),
+            PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "rviz_bringup.launch.py")),
         ),
     ]
 
     return LaunchDescription(arguments + launches + nodes)
 
 
-""" 
-Infamous bug where the TFs from map to anything other than odom was outdated (with the weird 0.2 timestamp) 
+"""
+Infamous bug where the TFs from map to anything other than odom was outdated (with the weird 0.2 timestamp)
 solved by calling libgazebo_ros_init.so and libgazebo_ros_factory.so
 
 https://discourse.ros.org/t/spawning-a-robot-entity-using-a-node-with-gazebo-and-ros-2/9985

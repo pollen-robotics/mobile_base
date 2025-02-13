@@ -161,6 +161,8 @@ CMD_VEL is the default mode. Services will automatically change the drive mode a
 5. GOTO =  Mode used by the go_to_xytheta service to do position control in odom frame
 
 6. EMERGENCY_STOP =  Calls the emergency_shutdown method
+7. 
+8. CMD_GOTO =  Behaves like CMD_VEL but uses the odometry to correct the commands
 
 Can be tested with CLI:
 ```
@@ -170,6 +172,7 @@ ros2 service call /SetZuuuMode zuuu_interfaces/srv/SetZuuuMode "{mode: FREE_WHEE
 ros2 service call /SetZuuuMode zuuu_interfaces/srv/SetZuuuMode "{mode: SPEED}" 
 ros2 service call /SetZuuuMode zuuu_interfaces/srv/SetZuuuMode "{mode: GOTO}" 
 ros2 service call /SetZuuuMode zuuu_interfaces/srv/SetZuuuMode "{mode: EMERGENCY_STOP}" 
+ros2 service call /SetZuuuMode zuuu_interfaces/srv/SetZuuuMode "{mode: CMD_GOTO}" 
 ```
 :bulb: Having a terminal ready with the EMERGENCY_STOP service call is a fast way to have a software stop. After an emergency stop there is no need to restart the robot, just kill and relaunch the HAL.  
 

@@ -1,5 +1,6 @@
-from setuptools import setup
 from glob import glob
+
+from setuptools import setup
 
 package_name = "zuuu_hal"
 examples_package_name = "examples"
@@ -26,6 +27,7 @@ setup(
         "console_scripts": [
             "follow_me = examples.follow_me:main",
             "hal = zuuu_hal.zuuu_hal:main",
+            "goto_client_test = zuuu_hal.zuuu_goto_action_client:main",
             "teleop_keyboard = examples.zuuu_teleop_keyboard:main",
             "teleop_joy = examples.zuuu_teleop_joy:main",
             "speed_calibration = examples.zuuu_speed_calibration:main",

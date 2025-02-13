@@ -1,18 +1,15 @@
+import math
+import os
 import sys
+import time
+import traceback
 
 import geometry_msgs.msg
-import rclpy
-
-from rclpy.node import Node
-import pygame
-import time
-import math
 import numpy as np
-import traceback
-import sys
-from rclpy.qos import ReliabilityPolicy, QoSProfile
-
-import os
+import pygame
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 
 # To be able to use pygame in "headless" mode
 # set SDL to use the dummy NULL video driver, so it doesn't need a windowing system.
@@ -85,11 +82,12 @@ class JoyTeleop(Node):
             self.emergency_shutdown()
         self.get_logger().info("nb joysticks: {}".format(self.nb_joy))
         self.j = pygame.joystick.Joystick(0)
-        self.lin_speed_ratio = 0.15
+        self.lin_speed_ratio = 0.5
         self.rot_speed_ratio = 1.5
         # The joyticks dont come back at a perfect 0 position when released.
         # Any abs(value) below min_joy_position will be assumed to be 0
         self.min_joy_position = 0.03
+        # self.pub = self.create_publisher(geometry_msgs.msg.Twist, "cmd_vel_gazebo", 10)
         self.pub = self.create_publisher(geometry_msgs.msg.Twist, "cmd_vel", 10)
         self.create_timer(0.01, self.main_tick)
         self.get_logger().info(msg)

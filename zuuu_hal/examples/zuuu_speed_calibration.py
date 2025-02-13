@@ -1,8 +1,8 @@
 import sys
+import time
 
 import geometry_msgs.msg
 import rclpy
-import time
 
 
 def main():
