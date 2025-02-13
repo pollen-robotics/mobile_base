@@ -535,12 +535,16 @@ class ZuuuHAL(Node):
 
         return response
 
-    def handle_get_zuuu_mode(self, request: GetZuuuMode.Request, response: GetZuuuMode.Response) -> GetZuuuMode.Response:
+    def handle_get_zuuu_mode(
+        self, request: GetZuuuMode.Request, response: GetZuuuMode.Response
+    ) -> GetZuuuMode.Response:
         """Handle GetZuuuMode service request"""
         response.mode = self.mode.name
         return response
 
-    def handle_reset_odometry(self, request: ResetOdometry.Request, response: ResetOdometry.Response) -> ResetOdometry.Response:
+    def handle_reset_odometry(
+        self, request: ResetOdometry.Request, response: ResetOdometry.Response
+    ) -> ResetOdometry.Response:
         """Handle ResetOdometry service request"""
         # Resetting asynchronously to prevent race conditions.
         self.reset_odom = True
@@ -548,7 +552,9 @@ class ZuuuHAL(Node):
         response.success = True
         return response
 
-    def handle_get_odometry(self, request: GetOdometry.Request, response: GetOdometry.Response) -> GetOdometry.Response:
+    def handle_get_odometry(
+        self, request: GetOdometry.Request, response: GetOdometry.Response
+    ) -> GetOdometry.Response:
         response.x = self.x_odom
         response.y = self.y_odom
         response.theta = self.theta_odom
@@ -557,7 +563,9 @@ class ZuuuHAL(Node):
         response.vtheta = self.vtheta
         return response
 
-    def handle_set_speed(self, request: SetSpeed.Request, response: SetSpeed.Response) -> SetSpeed.Response:
+    def handle_set_speed(
+        self, request: SetSpeed.Request, response: SetSpeed.Response
+    ) -> SetSpeed.Response:
         """Handle SetSpeed service request"""
         # This service automatically changes the zuuu mode
         self.mode = ZuuuModes.SPEED
@@ -580,7 +588,9 @@ class ZuuuHAL(Node):
         response.delta_x = self.x_goal - self.x_odom
         response.delta_y = self.y_goal - self.y_odom
         response.delta_theta = angle_diff(self.theta_goal, self.theta_odom)
-        response.distance = math.sqrt((self.x_goal - self.x_odom) ** 2 + (self.y_goal - self.y_odom) ** 2)
+        response.distance = math.sqrt(
+            (self.x_goal - self.x_odom) ** 2 + (self.y_goal - self.y_odom) ** 2
+        )
         return response
 
     def handle_get_battery_voltage(
@@ -899,9 +909,15 @@ class ZuuuHAL(Node):
         elif self.control_mode is ZuuuControlModes.PID:
             # rad/s to rpm to erpm
             wheel_speeds = self.limit_wheel_speeds(wheel_speeds)
-            self.omnibase.back_wheel.set_rpm(int(self.omnibase.half_poles * wheel_speeds[0] * 30 / math.pi))
-            self.omnibase.left_wheel.set_rpm(int(self.omnibase.half_poles * wheel_speeds[2] * 30 / math.pi))
-            self.omnibase.right_wheel.set_rpm(int(self.omnibase.half_poles * wheel_speeds[1] * 30 / math.pi))
+            self.omnibase.back_wheel.set_rpm(
+                int(self.omnibase.half_poles * wheel_speeds[0] * 30 / math.pi)
+            )
+            self.omnibase.left_wheel.set_rpm(
+                int(self.omnibase.half_poles * wheel_speeds[2] * 30 / math.pi)
+            )
+            self.omnibase.right_wheel.set_rpm(
+                int(self.omnibase.half_poles * wheel_speeds[1] * 30 / math.pi)
+            )
         else:
             self.get_logger().warning(f"unknown control mode '{self.control_mode}'")
 
@@ -1130,7 +1146,9 @@ class ZuuuHAL(Node):
         self.y_odom = 0.0
         self.theta_odom = 0.0
 
-    def handle_joy_discretization(self, dx, dy, dtheta, almost_zero=0.001, nb_directions=8):
+    def handle_joy_discretization(
+        self, dx, dy, dtheta, almost_zero=0.001, nb_directions=8
+    ):
         if abs(dx) < almost_zero and abs(dy) < almost_zero:
             rotation_on = False
             angle = 0
@@ -1235,7 +1253,9 @@ class ZuuuHAL(Node):
             direction_changed,
             rotation_changed,
             is_stationary,
-        ) = self.handle_joy_discretization(dx, dy, dtheta, almost_zero=almost_zero, nb_directions=8)
+        ) = self.handle_joy_discretization(
+            dx, dy, dtheta, almost_zero=almost_zero, nb_directions=8
+        )
 
         # Checking if we need to update our reference points
         if rotation_changed:

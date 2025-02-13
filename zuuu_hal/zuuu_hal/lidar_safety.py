@@ -66,7 +66,6 @@ class LidarSafety:
         # Read hardware version from configuration
         reachy_config = ReachyConfig(no_print=True)
         zuuu_version = reachy_config.mobile_base["version_hard"]
-
         # Not using TF transforms because this is faster
         # TODO use a static TF2 transform instead
         try:

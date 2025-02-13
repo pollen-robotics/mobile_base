@@ -10,9 +10,13 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    config = os.path.join(get_package_share_directory("zuuu_hal"), "config", "params.yaml")
+    config = os.path.join(
+        get_package_share_directory("zuuu_hal"), "config", "params.yaml"
+    )
 
-    rplidar_launch_dir = os.path.join(get_package_share_directory("rplidar_ros2"), "launch")
+    rplidar_launch_dir = os.path.join(
+        get_package_share_directory("rplidar_ros2"), "launch"
+    )
 
     # Launch arguments
     arguments = [
