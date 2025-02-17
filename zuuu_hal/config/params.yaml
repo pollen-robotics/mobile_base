@@ -11,8 +11,6 @@ zuuu_hal:
     max_accel_theta: 1.0
     max_speed_xy: 0.61
     max_speed_theta: 2.0
-    xy_tol: 0.0
-    theta_tol: 0.0
     smoothing_factor: 0.0
     safety_distance: 0.70 # distance from the center of the robot
     critical_distance: 0.55 # distance from the center of the robot

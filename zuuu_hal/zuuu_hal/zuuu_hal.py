@@ -139,8 +139,6 @@ class ZuuuHAL(Node):
                 ("max_accel_theta", 1.0),
                 ("max_speed_xy", 0.5),
                 ("max_speed_theta", 2.0),
-                ("xy_tol", 0.0),
-                ("theta_tol", 0.0),
                 ("smoothing_factor", 5.0),
                 ("safety_distance", 0.70),
                 ("critical_distance", 0.55),
@@ -182,8 +180,6 @@ class ZuuuHAL(Node):
         self.max_accel_theta: float = self.get_parameter("max_accel_theta").get_parameter_value().double_value
         self.max_speed_xy: float = self.get_parameter("max_speed_xy").get_parameter_value().double_value
         self.max_speed_theta: float = self.get_parameter("max_speed_theta").get_parameter_value().double_value
-        self.xy_tol: float = self.get_parameter("xy_tol").get_parameter_value().double_value
-        self.theta_tol: float = self.get_parameter("theta_tol").get_parameter_value().double_value
         self.smoothing_factor: float = self.get_parameter("smoothing_factor").get_parameter_value().double_value
         self.safety_distance: float = self.get_parameter("safety_distance").get_parameter_value().double_value
         self.critical_distance: float = self.get_parameter("critical_distance").get_parameter_value().double_value
@@ -390,14 +386,6 @@ class ZuuuHAL(Node):
                 elif param.name == "max_speed_theta":
                     if param.value >= 0.0:
                         self.max_speed_theta = param.value
-                        success = True
-                elif param.name == "xy_tol":
-                    if param.value >= 0.0:
-                        self.xy_tol = param.value
-                        success = True
-                elif param.name == "theta_tol":
-                    if param.value >= 0.0:
-                        self.theta_tol = param.value
                         success = True
                 elif param.name == "smoothing_factor":
                     if param.value >= 0.0:
