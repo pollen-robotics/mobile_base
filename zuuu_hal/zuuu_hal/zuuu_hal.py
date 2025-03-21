@@ -85,14 +85,12 @@ class ZuuuHAL(Node):
 
         self.fake_mode: bool = self.get_parameter("fake").value
         self.gazebo_mode: bool = self.get_parameter("gazebo").value
-        self.fake_hardware: bool = self.gazebo_mode
+        self.fake_hardware: bool = self.gazebo_mode or self.fake_mode
 
         if self.fake_mode and not self.gazebo_mode:
-            msg = "A mobile base is declared in the config but zuuu_hal does not support FAKE mode.\n"
-            msg += "Please set the mobile_base parameter 'enable' to 'false' in the config file when using FAKE mode. Shutting down zuuu_hal."
-            raise RuntimeError(msg)
+            self.get_logger().info("Running zuuu_hal in FAKE mode. No LIDAR and the odometry is perfect.\n")
         elif self.gazebo_mode:
-            self.get_logger().info("Running zuuu_hal in fake hardware mode - GAZEBO")
+            self.get_logger().info("Running zuuu_hal in GAZEBO mode (simulated hardware)\n")
         else:
             self.get_logger().info("Running zuuu_hal on physical hardware\n")
 
@@ -278,7 +276,7 @@ class ZuuuHAL(Node):
             self.scan_filter_callback,
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT),
         )
-        if self.fake_hardware:
+        if self.gazebo_mode:
             # In Gazebo mode subscribe to the odom topic published by the gazebo plugin.
             self.odom_sub = self.create_subscription(
                 Odometry,
@@ -419,6 +417,9 @@ class ZuuuHAL(Node):
 
     def scan_filter_callback(self, msg: LaserScan) -> None:
         """Callback method on the /scan topic. Handles the LIDAR filtering and safety calculations."""
+        if self.fake_mode:
+            # No LIDAR in fake mode
+            return
         self.scan_is_read = True
         self.scan_t0 = time.time()
         # LIDAR angle filter managemnt
@@ -979,6 +980,8 @@ class ZuuuHAL(Node):
         if dt_seconds == 0:
             return
         if not self.fake_hardware:
+            # Physical mobile base
+            
             # Note: VESC speed values are, as is normal, very noisy at low speeds.
             # We currently have no control on how the speeds are calculated.
             # -> By reading the encoder ticks directly and making the calculations here we could maybe make this a tad better?
@@ -1003,7 +1006,7 @@ class ZuuuHAL(Node):
             self.vx = x_vel
             self.vy = y_vel
             self.vtheta = theta_vel
-        else:
+        elif self.gazebo_mode:
             # Note: Using self.vx_gazebo and calculating the odometry from it as in the real case is a way of creating a noisy odometry
             # which is useful in certain situations. The version below uses the gazebo odometry directly which is much more precise.
             self.vx = self.vx_gazebo
@@ -1029,6 +1032,26 @@ class ZuuuHAL(Node):
             self.x_odom_gazebo_old = self.x_odom_gazebo
             self.y_odom_gazebo_old = self.y_odom_gazebo
             self.theta_odom_gazebo_old = self.theta_odom_gazebo
+        elif self.fake_hardware:
+            x_vel, y_vel, theta_vel = dk_vel(
+                self.calculated_wheel_speeds[2],
+                self.calculated_wheel_speeds[1],
+                self.calculated_wheel_speeds[0],
+                self.omnibase,
+            )
+            # Applying the small displacement in the world-fixed odom frame (simple 2D rotation)
+            dx = (x_vel * math.cos(self.theta_odom) - y_vel * math.sin(self.theta_odom)) * dt_seconds
+            dy = (x_vel * math.sin(self.theta_odom) + y_vel * math.cos(self.theta_odom)) * dt_seconds
+            dtheta = theta_vel * dt_seconds
+            self.x_odom += dx
+            self.y_odom += dy
+            self.theta_odom += dtheta
+            # These speeds are expected in the ego-centric frame
+            self.vx = x_vel
+            self.vy = y_vel
+            self.vtheta = theta_vel
+        else:
+            raise RuntimeError("No hardware mode selected (should be impossible)")
 
         if self.reset_odom:
             # Resetting asynchronously to prevent race conditions.
@@ -1126,8 +1149,7 @@ class ZuuuHAL(Node):
             self.get_logger().warning("Resetting the odometry while a GoTo is ON. Setting the mode to BRAKE for safety.")
             self.mode = ZuuuModes.BRAKE
 
-        if self.fake_hardware:
-            # TODO this is not enough, there is an accumulation of error when resetting the odometry in Gazebo mode
+        if self.gazebo_mode:
             self.theta_zuuu_vs_gazebo -= self.theta_odom
 
         self.x_odom = 0.0
