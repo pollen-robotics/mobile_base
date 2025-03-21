@@ -98,6 +98,36 @@ ros2 run zuuu_hal set_speed_service_test
 
 📌 See the [Goto Action](#goto-action) section for details.
 
+### Setting the drive mode
+CMD_GOTO is the default mode. Services will automatically change the drive mode as needed. 
+
+:bulb: The most common use case where handling drive modes by hand is useful is when going back to CMD_GOTO (or CMD_VEL) is needed after a call to SetSpeed or GoToXYTheta.
+
+1. CMD_VEL = The commands read on the topic /cmd_vel are applied after smoothing
+
+2. BRAKE =  Sets the PWMs to 0 effectively braking the base
+
+3. FREE_WHEEL =  Sets the current control to 0, coast mode
+
+4. SPEED =  Mode used by the set_speed service to do speed control over arbitrary duration
+
+5. GOTO =  Mode used by the go_to_xytheta service to do position control in odom frame
+
+6. EMERGENCY_STOP =  Calls the emergency_shutdown method
+
+7. CMD_GOTO =  Behaves like CMD_VEL but uses the odometry to correct the commands
+
+Can be tested with CLI:
+```
+ros2 service call /SetZuuuMode zuuu_interfaces/srv/SetZuuuMode "{mode: CMD_VEL}" 
+ros2 service call /SetZuuuMode zuuu_interfaces/srv/SetZuuuMode "{mode: BRAKE}" 
+ros2 service call /SetZuuuMode zuuu_interfaces/srv/SetZuuuMode "{mode: FREE_WHEEL}" 
+ros2 service call /SetZuuuMode zuuu_interfaces/srv/SetZuuuMode "{mode: SPEED}" 
+ros2 service call /SetZuuuMode zuuu_interfaces/srv/SetZuuuMode "{mode: GOTO}" 
+ros2 service call /SetZuuuMode zuuu_interfaces/srv/SetZuuuMode "{mode: EMERGENCY_STOP}" 
+ros2 service call /SetZuuuMode zuuu_interfaces/srv/SetZuuuMode "{mode: CMD_GOTO}" 
+```
+
 ---
 
 ## Goto Action
