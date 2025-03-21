@@ -7,8 +7,7 @@ from threading import Event
 import numpy as np
 import rclpy
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
-from rclpy.callback_groups import \
-    MutuallyExclusiveCallbackGroup  # ReentrantCallbackGroup
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup  # ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 
