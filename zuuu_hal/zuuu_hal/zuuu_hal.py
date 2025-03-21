@@ -977,6 +977,7 @@ class ZuuuHAL(Node):
         self.measure_timestamp = self.get_clock().now()
         dt_duration = self.measure_timestamp - self.old_measure_timestamp
         dt_seconds = dt_duration.nanoseconds / S_TO_NS
+
         if dt_seconds == 0:
             return
         if not self.fake_hardware:
@@ -1033,12 +1034,14 @@ class ZuuuHAL(Node):
             self.y_odom_gazebo_old = self.y_odom_gazebo
             self.theta_odom_gazebo_old = self.theta_odom_gazebo
         elif self.fake_hardware:
+            
             x_vel, y_vel, theta_vel = dk_vel(
-                self.calculated_wheel_speeds[2],
-                self.calculated_wheel_speeds[1],
-                self.calculated_wheel_speeds[0],
+                self.calculated_wheel_speeds[2]*60/(2*math.pi), # rad/s to rpm
+                self.calculated_wheel_speeds[1]*60/(2*math.pi),
+                self.calculated_wheel_speeds[0]*60/(2*math.pi),
                 self.omnibase,
             )
+            
             # Applying the small displacement in the world-fixed odom frame (simple 2D rotation)
             dx = (x_vel * math.cos(self.theta_odom) - y_vel * math.sin(self.theta_odom)) * dt_seconds
             dy = (x_vel * math.sin(self.theta_odom) + y_vel * math.cos(self.theta_odom)) * dt_seconds
@@ -1137,7 +1140,6 @@ class ZuuuHAL(Node):
             self.x_vel_goal = self.cmd_vel.linear.x
             self.y_vel_goal = self.cmd_vel.linear.y
             self.theta_vel_goal = self.cmd_vel.angular.z
-            self.get_logger().info(f"theta_vel_goal={self.theta_vel_goal:.2f}")
             self.fake_vel_goals_to_goto_goals(self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal)
             self.goto_tick(shortest_angle=False, distance_pid=self.distance_pid_cmd_goto, angle_pid=self.angle_pid_cmd_goto)
         else:
@@ -1352,11 +1354,14 @@ class ZuuuHAL(Node):
         This function is publisdes differently depending on the mode of the robot (fake or real hardware).
         """
         x_vel, y_vel, theta_vel = self.filter_speed_goals(self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal)
+        
         x_vel, y_vel, theta_vel = self.lidar_safety.safety_check_speed_command(x_vel, y_vel, theta_vel)
+        
         x_vel, y_vel, theta_vel = self.limit_vel_commands(x_vel, y_vel, theta_vel)
-
+        
         # IK calculations. From Robot's speed to wheels' speeds
         self.calculated_wheel_speeds = ik_vel(x_vel, y_vel, theta_vel, self.omnibase)
+
         if self.fake_hardware:
             # In fake or Gazebo mode, the robot's speed is published directly and the mouvement is simulated
             self.publish_fake_robot_speed(x_vel, y_vel, theta_vel)
