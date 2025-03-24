@@ -34,7 +34,7 @@ from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import Float32
 from tf2_ros import TransformBroadcaster
 
-from zuuu_hal.kinematics import dk_vel, ik_vel, pwm_to_wheel_rot_speed, wheel_rot_speed_to_pwm
+from zuuu_hal.kinematics import dk_vel, ik_vel, pwm_to_wheel_rot_speed, wheel_rot_speed_to_pwm, ik_vel_old
 from zuuu_hal.lidar_safety import LidarSafety
 from zuuu_hal.mobile_base import MobileBase
 from zuuu_hal.utils import PID, ZuuuControlModes, ZuuuModes, angle_diff, sign
@@ -421,9 +421,11 @@ class ZuuuHAL(Node):
 
     def scan_filter_callback(self, msg: LaserScan) -> None:
         """Callback method on the /scan topic. Handles the LIDAR filtering and safety calculations."""
+        self.get_logger().error("Received a LIDAR scan")
         if self.fake_mode:
             # No LIDAR in fake mode
             return
+        self.get_logger().error(f"msg: {msg}")
         self.scan_is_read = True
         self.scan_t0 = time.time()
         # LIDAR angle filter managemnt
@@ -833,7 +835,7 @@ class ZuuuHAL(Node):
         if (not self.scan_is_read) or ((t - self.scan_t0) > self.scan_timeout):
             # If too much time without a LIDAR scan, the speeds are set to 0 for safety.
             self.get_logger().warning("waiting for a LIDAR scan to be read. Discarding all commands...")
-            wheel_speeds = ik_vel(0.0, 0.0, 0.0, self.omnibase)
+            wheel_speeds = ik_vel_old(0.0, 0.0, 0.0, self.omnibase)
             self.send_wheel_commands(wheel_speeds)
             time.sleep(0.5)
             return False
@@ -1341,7 +1343,7 @@ class ZuuuHAL(Node):
         x_vel, y_vel, theta_vel = self.limit_vel_commands(x_vel, y_vel, theta_vel)
 
         # IK calculations. From Robot's speed to wheels' speeds
-        self.calculated_wheel_speeds = ik_vel(x_vel, y_vel, theta_vel, self.omnibase)
+        self.calculated_wheel_speeds = ik_vel_old(x_vel, y_vel, theta_vel, self.omnibase)
 
         if self.fake_hardware:
             # In fake or Gazebo mode, the robot's speed is published directly and the mouvement is simulated
