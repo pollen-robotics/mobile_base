@@ -87,11 +87,11 @@ class ZuuuHAL(Node):
         self.declare_parameter("fake", False)
         self.declare_parameter("gazebo", False)
 
-        self.fake_mode: bool = self.get_parameter("fake").value
+        self.fake_mode: bool = self.get_parameter("fake").value and not self.get_parameter("gazebo").value
         self.gazebo_mode: bool = self.get_parameter("gazebo").value
         self.fake_hardware: bool = self.gazebo_mode or self.fake_mode
 
-        if self.fake_mode and not self.gazebo_mode:
+        if self.fake_mode:
             self.get_logger().info("Running zuuu_hal in FAKE mode. No LIDAR and the odometry is perfect.\n")
         elif self.gazebo_mode:
             self.get_logger().info("Running zuuu_hal in GAZEBO mode (simulated hardware)\n")
