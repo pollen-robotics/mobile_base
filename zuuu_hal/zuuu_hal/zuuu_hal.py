@@ -83,16 +83,14 @@ class ZuuuHAL(Node):
         self.declare_parameter("fake", False)
         self.declare_parameter("gazebo", False)
 
-        self.fake_mode: bool = self.get_parameter("fake").value
+        self.fake_mode: bool = self.get_parameter("fake").value and not self.get_parameter("gazebo").value
         self.gazebo_mode: bool = self.get_parameter("gazebo").value
-        self.fake_hardware: bool = self.gazebo_mode
+        self.fake_hardware: bool = self.gazebo_mode or self.fake_mode
 
-        if self.fake_mode and not self.gazebo_mode:
-            msg = "A mobile base is declared in the config but zuuu_hal does not support FAKE mode.\n"
-            msg += "Please set the mobile_base parameter 'enable' to 'false' in the config file when using FAKE mode. Shutting down zuuu_hal."
-            raise RuntimeError(msg)
+        if self.fake_mode:
+            self.get_logger().info("Running zuuu_hal in FAKE mode. No LIDAR and the odometry is perfect.\n")
         elif self.gazebo_mode:
-            self.get_logger().info("Running zuuu_hal in fake hardware mode - GAZEBO")
+            self.get_logger().info("Running zuuu_hal in GAZEBO mode (simulated hardware)\n")
         else:
             self.get_logger().info("Running zuuu_hal on physical hardware\n")
 
@@ -278,7 +276,7 @@ class ZuuuHAL(Node):
             self.scan_filter_callback,
             QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT),
         )
-        if self.fake_hardware:
+        if self.gazebo_mode:
             # In Gazebo mode subscribe to the odom topic published by the gazebo plugin.
             self.odom_sub = self.create_subscription(
                 Odometry,
@@ -419,6 +417,9 @@ class ZuuuHAL(Node):
 
     def scan_filter_callback(self, msg: LaserScan) -> None:
         """Callback method on the /scan topic. Handles the LIDAR filtering and safety calculations."""
+        if self.fake_mode:
+            # No LIDAR in fake mode
+            return
         self.scan_is_read = True
         self.scan_t0 = time.time()
         # LIDAR angle filter managemnt
@@ -523,16 +524,12 @@ class ZuuuHAL(Node):
 
         return response
 
-    def handle_get_zuuu_mode(
-        self, request: GetZuuuMode.Request, response: GetZuuuMode.Response
-    ) -> GetZuuuMode.Response:
+    def handle_get_zuuu_mode(self, request: GetZuuuMode.Request, response: GetZuuuMode.Response) -> GetZuuuMode.Response:
         """Handle GetZuuuMode service request"""
         response.mode = self.mode.name
         return response
 
-    def handle_reset_odometry(
-        self, request: ResetOdometry.Request, response: ResetOdometry.Response
-    ) -> ResetOdometry.Response:
+    def handle_reset_odometry(self, request: ResetOdometry.Request, response: ResetOdometry.Response) -> ResetOdometry.Response:
         """Handle ResetOdometry service request"""
         # Resetting asynchronously to prevent race conditions.
         self.reset_odom = True
@@ -540,9 +537,7 @@ class ZuuuHAL(Node):
         response.success = True
         return response
 
-    def handle_get_odometry(
-        self, request: GetOdometry.Request, response: GetOdometry.Response
-    ) -> GetOdometry.Response:
+    def handle_get_odometry(self, request: GetOdometry.Request, response: GetOdometry.Response) -> GetOdometry.Response:
         response.x = self.x_odom
         response.y = self.y_odom
         response.theta = self.theta_odom
@@ -551,9 +546,7 @@ class ZuuuHAL(Node):
         response.vtheta = self.vtheta
         return response
 
-    def handle_set_speed(
-        self, request: SetSpeed.Request, response: SetSpeed.Response
-    ) -> SetSpeed.Response:
+    def handle_set_speed(self, request: SetSpeed.Request, response: SetSpeed.Response) -> SetSpeed.Response:
         """Handle SetSpeed service request"""
         # This service automatically changes the zuuu mode
         self.mode = ZuuuModes.SPEED
@@ -576,9 +569,7 @@ class ZuuuHAL(Node):
         response.delta_x = self.x_goal - self.x_odom
         response.delta_y = self.y_goal - self.y_odom
         response.delta_theta = angle_diff(self.theta_goal, self.theta_odom)
-        response.distance = math.sqrt(
-            (self.x_goal - self.x_odom) ** 2 + (self.y_goal - self.y_odom) ** 2
-        )
+        response.distance = math.sqrt((self.x_goal - self.x_odom) ** 2 + (self.y_goal - self.y_odom) ** 2)
         return response
 
     def handle_get_battery_voltage(
@@ -767,9 +758,7 @@ class ZuuuHAL(Node):
     def limit_vel_commands(self, x_vel, y_vel, theta_vel):
         xy_speed = math.sqrt(x_vel**2 + y_vel**2)
         if xy_speed > self.max_speed_xy:
-            self.get_logger().warning(
-                f"Requesting xy_speed ({xy_speed}) above maximum ({self.max_speed_xy}). Reducing it."
-            )
+            self.get_logger().warning(f"Requesting xy_speed ({xy_speed}) above maximum ({self.max_speed_xy}). Reducing it.")
             if x_vel == 0:
                 y_vel = self.max_speed_xy
             elif y_vel == 0:
@@ -840,7 +829,7 @@ class ZuuuHAL(Node):
         if (not self.scan_is_read) or ((t - self.scan_t0) > self.scan_timeout):
             # If too much time without a LIDAR scan, the speeds are set to 0 for safety.
             self.get_logger().warning("waiting for a LIDAR scan to be read. Discarding all commands...")
-            wheel_speeds = self.ik_vel(0.0, 0.0, 0.0, self.omnibase)
+            wheel_speeds = ik_vel(0.0, 0.0, 0.0, self.omnibase.wheel_radius, self.omnibase.wheel_to_center)
             self.send_wheel_commands(wheel_speeds)
             time.sleep(0.5)
             return False
@@ -897,15 +886,9 @@ class ZuuuHAL(Node):
         elif self.control_mode is ZuuuControlModes.PID:
             # rad/s to rpm to erpm
             wheel_speeds = self.limit_wheel_speeds(wheel_speeds)
-            self.omnibase.back_wheel.set_rpm(
-                int(self.omnibase.half_poles * wheel_speeds[0] * 30 / math.pi)
-            )
-            self.omnibase.left_wheel.set_rpm(
-                int(self.omnibase.half_poles * wheel_speeds[2] * 30 / math.pi)
-            )
-            self.omnibase.right_wheel.set_rpm(
-                int(self.omnibase.half_poles * wheel_speeds[1] * 30 / math.pi)
-            )
+            self.omnibase.back_wheel.set_rpm(int(self.omnibase.half_poles * wheel_speeds[0] * 30 / math.pi))
+            self.omnibase.left_wheel.set_rpm(int(self.omnibase.half_poles * wheel_speeds[2] * 30 / math.pi))
+            self.omnibase.right_wheel.set_rpm(int(self.omnibase.half_poles * wheel_speeds[1] * 30 / math.pi))
         else:
             self.get_logger().warning(f"unknown control mode '{self.control_mode}'")
 
@@ -976,9 +959,12 @@ class ZuuuHAL(Node):
         self.measure_timestamp = self.get_clock().now()
         dt_duration = self.measure_timestamp - self.old_measure_timestamp
         dt_seconds = dt_duration.nanoseconds / S_TO_NS
+
         if dt_seconds == 0:
             return
         if not self.fake_hardware:
+            # Physical mobile base
+
             # Note: VESC speed values are, as is normal, very noisy at low speeds.
             # We currently have no control on how the speeds are calculated.
             # -> By reading the encoder ticks directly and making the calculations here we could maybe make this a tad better?
@@ -990,8 +976,10 @@ class ZuuuHAL(Node):
                 self.omnibase.left_wheel_rpm * pole_factor,
                 self.omnibase.right_wheel_rpm * pole_factor,
                 self.omnibase.back_wheel_rpm * pole_factor,
-                self.omnibase,
+                self.omnibase.wheel_radius,
+                self.omnibase.wheel_to_center,
             )
+
             # Applying the small displacement in the world-fixed odom frame (simple 2D rotation)
             dx = (x_vel * math.cos(self.theta_odom) - y_vel * math.sin(self.theta_odom)) * dt_seconds
             dy = (x_vel * math.sin(self.theta_odom) + y_vel * math.cos(self.theta_odom)) * dt_seconds
@@ -1003,7 +991,7 @@ class ZuuuHAL(Node):
             self.vx = x_vel
             self.vy = y_vel
             self.vtheta = theta_vel
-        else:
+        elif self.gazebo_mode:
             # Note: Using self.vx_gazebo and calculating the odometry from it as in the real case is a way of creating a noisy odometry
             # which is useful in certain situations. The version below uses the gazebo odometry directly which is much more precise.
             self.vx = self.vx_gazebo
@@ -1029,6 +1017,28 @@ class ZuuuHAL(Node):
             self.x_odom_gazebo_old = self.x_odom_gazebo
             self.y_odom_gazebo_old = self.y_odom_gazebo
             self.theta_odom_gazebo_old = self.theta_odom_gazebo
+        elif self.fake_hardware:
+            x_vel, y_vel, theta_vel = dk_vel(
+                self.calculated_wheel_speeds[2] * 60 / (2 * math.pi),  # rad/s to rpm
+                self.calculated_wheel_speeds[1] * 60 / (2 * math.pi),
+                self.calculated_wheel_speeds[0] * 60 / (2 * math.pi),
+                self.omnibase.wheel_radius,
+                self.omnibase.wheel_to_center,
+            )
+
+            # Applying the small displacement in the world-fixed odom frame (simple 2D rotation)
+            dx = (x_vel * math.cos(self.theta_odom) - y_vel * math.sin(self.theta_odom)) * dt_seconds
+            dy = (x_vel * math.sin(self.theta_odom) + y_vel * math.cos(self.theta_odom)) * dt_seconds
+            dtheta = theta_vel * dt_seconds
+            self.x_odom += dx
+            self.y_odom += dy
+            self.theta_odom += dtheta
+            # These speeds are expected in the ego-centric frame
+            self.vx = x_vel
+            self.vy = y_vel
+            self.vtheta = theta_vel
+        else:
+            raise RuntimeError("No hardware mode selected (should be impossible)")
 
         if self.reset_odom:
             # Resetting asynchronously to prevent race conditions.
@@ -1114,7 +1124,6 @@ class ZuuuHAL(Node):
             self.x_vel_goal = self.cmd_vel.linear.x
             self.y_vel_goal = self.cmd_vel.linear.y
             self.theta_vel_goal = self.cmd_vel.angular.z
-            self.get_logger().info(f"theta_vel_goal={self.theta_vel_goal:.2f}")
             self.fake_vel_goals_to_goto_goals(self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal)
             self.goto_tick(shortest_angle=False, distance_pid=self.distance_pid_cmd_goto, angle_pid=self.angle_pid_cmd_goto)
         else:
@@ -1126,17 +1135,14 @@ class ZuuuHAL(Node):
             self.get_logger().warning("Resetting the odometry while a GoTo is ON. Setting the mode to BRAKE for safety.")
             self.mode = ZuuuModes.BRAKE
 
-        if self.fake_hardware:
-            # TODO this is not enough, there is an accumulation of error when resetting the odometry in Gazebo mode
+        if self.gazebo_mode:
             self.theta_zuuu_vs_gazebo -= self.theta_odom
 
         self.x_odom = 0.0
         self.y_odom = 0.0
         self.theta_odom = 0.0
 
-    def handle_joy_discretization(
-        self, dx, dy, dtheta, almost_zero=0.001, nb_directions=8
-    ):
+    def handle_joy_discretization(self, dx, dy, dtheta, almost_zero=0.001, nb_directions=8):
         if abs(dx) < almost_zero and abs(dy) < almost_zero:
             rotation_on = False
             angle = 0
@@ -1241,9 +1247,7 @@ class ZuuuHAL(Node):
             direction_changed,
             rotation_changed,
             is_stationary,
-        ) = self.handle_joy_discretization(
-            dx, dy, dtheta, almost_zero=almost_zero, nb_directions=8
-        )
+        ) = self.handle_joy_discretization(dx, dy, dtheta, almost_zero=almost_zero, nb_directions=8)
 
         # Checking if we need to update our reference points
         if rotation_changed:
@@ -1330,11 +1334,16 @@ class ZuuuHAL(Node):
         This function is publisdes differently depending on the mode of the robot (fake or real hardware).
         """
         x_vel, y_vel, theta_vel = self.filter_speed_goals(self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal)
+
         x_vel, y_vel, theta_vel = self.lidar_safety.safety_check_speed_command(x_vel, y_vel, theta_vel)
+
         x_vel, y_vel, theta_vel = self.limit_vel_commands(x_vel, y_vel, theta_vel)
 
         # IK calculations. From Robot's speed to wheels' speeds
-        self.calculated_wheel_speeds = ik_vel(x_vel, y_vel, theta_vel, self.omnibase)
+        self.calculated_wheel_speeds = ik_vel(
+            x_vel, y_vel, theta_vel, self.omnibase.wheel_radius, self.omnibase.wheel_to_center
+        )
+
         if self.fake_hardware:
             # In fake or Gazebo mode, the robot's speed is published directly and the mouvement is simulated
             self.publish_fake_robot_speed(x_vel, y_vel, theta_vel)
@@ -1418,7 +1427,6 @@ def main(args=None) -> None:
         zuuu_hal.emergency_shutdown("Default zuuu_hal shutdown")
         rclpy.shutdown()
         executor_thread.join()
-
 
 
 if __name__ == "__main__":

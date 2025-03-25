@@ -227,7 +227,7 @@ class ZuuuGotoActionServer(Node):
         self.get_logger().info(f"Received cancel request")
 
         # Check state and decide
-        if goal_handle.is_active or goal_handle.is_executing:
+        if goal_handle.is_active:
             return CancelResponse.ACCEPT
         else:
             return CancelResponse.REJECT
