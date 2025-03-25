@@ -833,7 +833,7 @@ class ZuuuHAL(Node):
         if (not self.scan_is_read) or ((t - self.scan_t0) > self.scan_timeout):
             # If too much time without a LIDAR scan, the speeds are set to 0 for safety.
             self.get_logger().warning("waiting for a LIDAR scan to be read. Discarding all commands...")
-            wheel_speeds = ik_vel(0.0, 0.0, 0.0, self.omnibase)
+            wheel_speeds = ik_vel(0.0, 0.0, 0.0, self.omnibase.wheel_radius, self.omnibase.wheel_to_center)
             self.send_wheel_commands(wheel_speeds)
             time.sleep(0.5)
             return False
@@ -979,9 +979,8 @@ class ZuuuHAL(Node):
             x_vel, y_vel, theta_vel = dk_vel(
                 self.omnibase.left_wheel_rpm * pole_factor,
                 self.omnibase.right_wheel_rpm * pole_factor,
-                self.omnibase.back_wheel_rpm * pole_factor,
-                self.omnibase,
-            )
+                self.omnibase.back_wheel_rpm * pole_factor, self.omnibase.wheel_radius, self.omnibase.wheel_to_center)
+            
             # Applying the small displacement in the world-fixed odom frame (simple 2D rotation)
             dx = (x_vel * math.cos(self.theta_odom) - y_vel * math.sin(self.theta_odom)) * dt_seconds
             dy = (x_vel * math.sin(self.theta_odom) + y_vel * math.cos(self.theta_odom)) * dt_seconds
@@ -1023,9 +1022,7 @@ class ZuuuHAL(Node):
             x_vel, y_vel, theta_vel = dk_vel(
                 self.calculated_wheel_speeds[2] * 60 / (2 * math.pi),  # rad/s to rpm
                 self.calculated_wheel_speeds[1] * 60 / (2 * math.pi),
-                self.calculated_wheel_speeds[0] * 60 / (2 * math.pi),
-                self.omnibase,
-            )
+                self.calculated_wheel_speeds[0] * 60 / (2 * math.pi), self.omnibase.wheel_radius, self.omnibase.wheel_to_center)
 
             # Applying the small displacement in the world-fixed odom frame (simple 2D rotation)
             dx = (x_vel * math.cos(self.theta_odom) - y_vel * math.sin(self.theta_odom)) * dt_seconds
@@ -1341,7 +1338,7 @@ class ZuuuHAL(Node):
         x_vel, y_vel, theta_vel = self.limit_vel_commands(x_vel, y_vel, theta_vel)
 
         # IK calculations. From Robot's speed to wheels' speeds
-        self.calculated_wheel_speeds = ik_vel(x_vel, y_vel, theta_vel, self.omnibase)
+        self.calculated_wheel_speeds = ik_vel(x_vel, y_vel, theta_vel, self.omnibase.wheel_radius, self.omnibase.wheel_to_center)
 
         if self.fake_hardware:
             # In fake or Gazebo mode, the robot's speed is published directly and the mouvement is simulated

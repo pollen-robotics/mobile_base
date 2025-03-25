@@ -21,11 +21,10 @@ from typing import List, Tuple
 
 import numpy as np
 
-from zuuu_hal.mobile_base import MobileBase
 from zuuu_hal.utils import sign
 
 
-def ik_vel(x_vel: float, y_vel: float, rot_vel: float, mobile_base: MobileBase) -> List[float]:
+def ik_vel(x_vel: float, y_vel: float, rot_vel: float, wheel_radius: float, wheel_to_center:float) -> List[float]:
     """Takes 2 linear speeds and 1 rotational speed (robot's egocentric frame) and outputs the rotational speed (rad/s)
     of each of the 3 motors in an omni setup.
 
@@ -33,22 +32,23 @@ def ik_vel(x_vel: float, y_vel: float, rot_vel: float, mobile_base: MobileBase) 
         x_vel (float): x speed (m/s). Positive "in front" of the robot.
         y_vel (float): y speed (m/s). Positive "to the left" of the robot.
         rot_vel (float): rotational speed (rad/s). Positive counter-clock wise.
-        mobile_base (MobileBase): An instance providing wheel_radius, wheel_to_center, etc.
+        wheel_radius (float): Radius of the wheels (m).
+        wheel_to_center (float): Distance from the center of the robot to the wheels (m).
 
     Returns:
         List[float]: A list with three wheel speeds (rad/s).
     """
-    wheel_rot_speed_back = (1 / mobile_base.wheel_radius) * (mobile_base.wheel_to_center * rot_vel - y_vel)
-    wheel_rot_speed_right = (1 / mobile_base.wheel_radius) * (
-        mobile_base.wheel_to_center * rot_vel + y_vel / 2.0 + np.sin(np.pi / 3) * x_vel
+    wheel_rot_speed_back = (1 / wheel_radius) * (wheel_to_center * rot_vel - y_vel)
+    wheel_rot_speed_right = (1 / wheel_radius) * (
+        wheel_to_center * rot_vel + y_vel / 2.0 + np.sin(np.pi / 3) * x_vel
     )
-    wheel_rot_speed_left = (1 / mobile_base.wheel_radius) * (
-        mobile_base.wheel_to_center * rot_vel + y_vel / 2 - np.sin(np.pi / 3) * x_vel
+    wheel_rot_speed_left = (1 / wheel_radius) * (
+        wheel_to_center * rot_vel + y_vel / 2 - np.sin(np.pi / 3) * x_vel
     )
     return [wheel_rot_speed_back, wheel_rot_speed_right, wheel_rot_speed_left]
 
 
-def dk_vel(rot_l: float, rot_r: float, rot_b: float, mobile_base: MobileBase) -> Tuple[float, float, float]:
+def dk_vel(rot_l: float, rot_r: float, rot_b: float, wheel_radius: float, wheel_to_center: float) -> Tuple[float, float, float]:
     """Takes the 3 rotational speeds (in rpm) of the 3 wheels and outputs the x linear speed (m/s),
     y linear speed (m/s) and rotational speed (rad/s) in the robot egocentric frame.
 
@@ -56,19 +56,20 @@ def dk_vel(rot_l: float, rot_r: float, rot_b: float, mobile_base: MobileBase) ->
         rot_l (float): rpm speed of the left wheel.
         rot_r (float): rpm speed of the right wheel.
         rot_b (float): rpm speed of the back wheel.
-        mobile_base (MobileBase): Provides wheel_radius, wheel_to_center, etc.
+        wheel_radius (float): Radius of the wheels (m).
+        wheel_to_center (float): Distance from the center of the robot to the wheels (m).
 
     Returns:
         Tuple[float, float, float]: (x_vel, y_vel, theta_vel).
     """
     # Convert rpm to rad/s then to m/s.
-    speed_l = (2 * np.pi * rot_l / 60) * mobile_base.wheel_radius
-    speed_r = (2 * np.pi * rot_r / 60) * mobile_base.wheel_radius
-    speed_b = (2 * np.pi * rot_b / 60) * mobile_base.wheel_radius
+    speed_l = (2 * np.pi * rot_l / 60) * wheel_radius
+    speed_r = (2 * np.pi * rot_r / 60) * wheel_radius
+    speed_b = (2 * np.pi * rot_b / 60) * wheel_radius
 
     x_vel = -speed_l * (1 / (2 * np.sin(np.pi / 3))) + speed_r * (1 / (2 * np.sin(np.pi / 3)))
     y_vel = -speed_b * 2 / 3.0 + speed_l * 1 / 3.0 + speed_r * 1 / 3.0
-    theta_vel = (speed_l + speed_r + speed_b) / (3 * mobile_base.wheel_to_center)
+    theta_vel = (speed_l + speed_r + speed_b) / (3 * wheel_to_center)
     return x_vel, y_vel, theta_vel
 
 
@@ -106,7 +107,7 @@ def pwm_to_wheel_rot_speed(pwm: float) -> float:
     return rot
 
 
-def ik_vel_to_pwm(x_vel: float, y_vel: float, rot_vel: float, mobile_base: MobileBase) -> List[float]:
+def ik_vel_to_pwm(x_vel: float, y_vel: float, rot_vel: float, wheel_radius: float, wheel_to_center:float) -> List[float]:
     """Takes 2 linear speeds and 1 rotational speed (robot's egocentric frame)
     and outputs the PWM to apply to each of the 3 motors in an omni setup.
 
@@ -114,12 +115,12 @@ def ik_vel_to_pwm(x_vel: float, y_vel: float, rot_vel: float, mobile_base: Mobil
         x_vel (float): x speed (m/s). Positive "in front" of the robot.
         y_vel (float): y speed (m/s). Positive "to the left" of the robot.
         rot_vel (float): rotational speed (rad/s). Positive counter-clock wise.
-        mobile_base (MobileBase): Provides necessary hardware constants.
-
+        wheel_radius (float): Radius of the wheels (m).
+        wheel_to_center (float): Distance from the center of the robot to the wheels (m).
     Returns:
         List[float]: A list of PWM values for the wheels.
     """
-    rot_vels = ik_vel(x_vel, y_vel, rot_vel, mobile_base)
+    rot_vels = ik_vel(x_vel, y_vel, rot_vel, wheel_radius, wheel_to_center)
     return [wheel_rot_speed_to_pwm(rot) for rot in rot_vels]
 
 
@@ -143,17 +144,17 @@ def ik_vel_old(x: float, y: float, rot: float) -> List[float]:
 
 def test_ik_vs_dk():
     # Test the inverse and direct kinematics functions
-    omnibase = MobileBase(
-                left_wheel_id=24, right_wheel_id=72, back_wheel_id=None, fake_hardware=True
-            )
+    wheel_radius: float = 0.21 / 2.0
+    wheel_to_center: float = 0.19588
+
     x_vel = 0.1
     y_vel = 0.1
     rot_vel = 0.1
-    wheel_rot_speeds = ik_vel(x_vel, y_vel, rot_vel, omnibase)
+    wheel_rot_speeds = ik_vel(x_vel, y_vel, rot_vel, wheel_radius, wheel_to_center)
     print("Desired velocities: x={}, y={}, rot={}".format(x_vel, y_vel, rot_vel))
-    wheel_rot_speeds = ik_vel(x_vel, y_vel, rot_vel, omnibase)
+    wheel_rot_speeds = ik_vel(x_vel, y_vel, rot_vel, wheel_radius, wheel_to_center)
     print("Wheel speeds: back={}, right={}, left={}".format(*wheel_rot_speeds))
-    x_vel, y_vel, rot_vel = dk_vel(wheel_rot_speeds[2] * 60 / (2 * np.pi), wheel_rot_speeds[1] * 60 / (2 * np.pi), wheel_rot_speeds[0] * 60 / (2 * np.pi), omnibase)
+    x_vel, y_vel, rot_vel = dk_vel(wheel_rot_speeds[2] * 60 / (2 * np.pi), wheel_rot_speeds[1] * 60 / (2 * np.pi), wheel_rot_speeds[0] * 60 / (2 * np.pi), wheel_radius, wheel_to_center)
     print("Recovered velocities: x={}, y={}, rot={}".format(x_vel, y_vel, rot_vel))
     
     # Test many combinations of velocities and check that we recover the same velocities
@@ -162,8 +163,8 @@ def test_ik_vs_dk():
         for y_vel in np.linspace(-0.1, 0.1, 5):
             for rot_vel in np.linspace(-0.1, 0.1, 5):
                 nb_tests += 1
-                wheel_rot_speeds = ik_vel(x_vel, y_vel, rot_vel, omnibase)
-                x_vel2, y_vel2, rot_vel2 = dk_vel(wheel_rot_speeds[2] * 60 / (2 * np.pi), wheel_rot_speeds[1] * 60 / (2 * np.pi), wheel_rot_speeds[0] * 60 / (2 * np.pi), omnibase)
+                wheel_rot_speeds = ik_vel(x_vel, y_vel, rot_vel, wheel_radius, wheel_to_center)
+                x_vel2, y_vel2, rot_vel2 = dk_vel(wheel_rot_speeds[2] * 60 / (2 * np.pi), wheel_rot_speeds[1] * 60 / (2 * np.pi), wheel_rot_speeds[0] * 60 / (2 * np.pi), wheel_radius, wheel_to_center)
                 assert np.isclose(x_vel, x_vel2)
                 assert np.isclose(y_vel, y_vel2)
                 assert np.isclose(rot_vel, rot_vel2)
