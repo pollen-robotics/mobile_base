@@ -24,7 +24,7 @@ import numpy as np
 from zuuu_hal.utils import sign
 
 
-def ik_vel(x_vel: float, y_vel: float, rot_vel: float, wheel_radius: float, wheel_to_center:float) -> List[float]:
+def ik_vel(x_vel: float, y_vel: float, rot_vel: float, wheel_radius: float, wheel_to_center: float) -> List[float]:
     """Takes 2 linear speeds and 1 rotational speed (robot's egocentric frame) and outputs the rotational speed (rad/s)
     of each of the 3 motors in an omni setup.
 
@@ -39,12 +39,8 @@ def ik_vel(x_vel: float, y_vel: float, rot_vel: float, wheel_radius: float, whee
         List[float]: A list with three wheel speeds (rad/s).
     """
     wheel_rot_speed_back = (1 / wheel_radius) * (wheel_to_center * rot_vel - y_vel)
-    wheel_rot_speed_right = (1 / wheel_radius) * (
-        wheel_to_center * rot_vel + y_vel / 2.0 + np.sin(np.pi / 3) * x_vel
-    )
-    wheel_rot_speed_left = (1 / wheel_radius) * (
-        wheel_to_center * rot_vel + y_vel / 2 - np.sin(np.pi / 3) * x_vel
-    )
+    wheel_rot_speed_right = (1 / wheel_radius) * (wheel_to_center * rot_vel + y_vel / 2.0 + np.sin(np.pi / 3) * x_vel)
+    wheel_rot_speed_left = (1 / wheel_radius) * (wheel_to_center * rot_vel + y_vel / 2 - np.sin(np.pi / 3) * x_vel)
     return [wheel_rot_speed_back, wheel_rot_speed_right, wheel_rot_speed_left]
 
 
@@ -107,7 +103,7 @@ def pwm_to_wheel_rot_speed(pwm: float) -> float:
     return rot
 
 
-def ik_vel_to_pwm(x_vel: float, y_vel: float, rot_vel: float, wheel_radius: float, wheel_to_center:float) -> List[float]:
+def ik_vel_to_pwm(x_vel: float, y_vel: float, rot_vel: float, wheel_radius: float, wheel_to_center: float) -> List[float]:
     """Takes 2 linear speeds and 1 rotational speed (robot's egocentric frame)
     and outputs the PWM to apply to each of the 3 motors in an omni setup.
 
@@ -154,9 +150,15 @@ def test_ik_vs_dk():
     print("Desired velocities: x={}, y={}, rot={}".format(x_vel, y_vel, rot_vel))
     wheel_rot_speeds = ik_vel(x_vel, y_vel, rot_vel, wheel_radius, wheel_to_center)
     print("Wheel speeds: back={}, right={}, left={}".format(*wheel_rot_speeds))
-    x_vel, y_vel, rot_vel = dk_vel(wheel_rot_speeds[2] * 60 / (2 * np.pi), wheel_rot_speeds[1] * 60 / (2 * np.pi), wheel_rot_speeds[0] * 60 / (2 * np.pi), wheel_radius, wheel_to_center)
+    x_vel, y_vel, rot_vel = dk_vel(
+        wheel_rot_speeds[2] * 60 / (2 * np.pi),
+        wheel_rot_speeds[1] * 60 / (2 * np.pi),
+        wheel_rot_speeds[0] * 60 / (2 * np.pi),
+        wheel_radius,
+        wheel_to_center,
+    )
     print("Recovered velocities: x={}, y={}, rot={}".format(x_vel, y_vel, rot_vel))
-    
+
     # Test many combinations of velocities and check that we recover the same velocities
     nb_tests = 0
     for x_vel in np.linspace(-0.1, 0.1, 5):
@@ -164,11 +166,18 @@ def test_ik_vs_dk():
             for rot_vel in np.linspace(-0.1, 0.1, 5):
                 nb_tests += 1
                 wheel_rot_speeds = ik_vel(x_vel, y_vel, rot_vel, wheel_radius, wheel_to_center)
-                x_vel2, y_vel2, rot_vel2 = dk_vel(wheel_rot_speeds[2] * 60 / (2 * np.pi), wheel_rot_speeds[1] * 60 / (2 * np.pi), wheel_rot_speeds[0] * 60 / (2 * np.pi), wheel_radius, wheel_to_center)
+                x_vel2, y_vel2, rot_vel2 = dk_vel(
+                    wheel_rot_speeds[2] * 60 / (2 * np.pi),
+                    wheel_rot_speeds[1] * 60 / (2 * np.pi),
+                    wheel_rot_speeds[0] * 60 / (2 * np.pi),
+                    wheel_radius,
+                    wheel_to_center,
+                )
                 assert np.isclose(x_vel, x_vel2)
                 assert np.isclose(y_vel, y_vel2)
                 assert np.isclose(rot_vel, rot_vel2)
     print(f"All {nb_tests} tests passed!")
+
 
 if __name__ == "__main__":
     test_ik_vs_dk()

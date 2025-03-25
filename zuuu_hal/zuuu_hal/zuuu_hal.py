@@ -23,7 +23,9 @@ from geometry_msgs.msg import TransformStamped, Twist
 from nav_msgs.msg import Odometry
 from pollen_msgs.msg import MobileBaseState
 from rcl_interfaces.msg import SetParametersResult
-from rclpy.callback_groups import CallbackGroup, MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
+from rclpy.callback_groups import (CallbackGroup,
+                                   MutuallyExclusiveCallbackGroup,
+                                   ReentrantCallbackGroup)
 from rclpy.constants import S_TO_NS
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
@@ -34,22 +36,16 @@ from sensor_msgs.msg import Image, LaserScan
 from std_msgs.msg import Float32
 from tf2_ros import TransformBroadcaster
 
-from zuuu_hal.kinematics import dk_vel, ik_vel, pwm_to_wheel_rot_speed, wheel_rot_speed_to_pwm
+from zuuu_hal.kinematics import (dk_vel, ik_vel, pwm_to_wheel_rot_speed,
+                                 wheel_rot_speed_to_pwm)
 from zuuu_hal.lidar_safety import LidarSafety
 from zuuu_hal.mobile_base import MobileBase
 from zuuu_hal.utils import PID, ZuuuControlModes, ZuuuModes, angle_diff, sign
 from zuuu_hal.zuuu_goto_action_server import ZuuuGotoActionServer
-from zuuu_interfaces.srv import (
-    DistanceToGoal,
-    GetBatteryVoltage,
-    GetOdometry,
-    GetZuuuMode,
-    GetZuuuSafety,
-    ResetOdometry,
-    SetSpeed,
-    SetZuuuMode,
-    SetZuuuSafety,
-)
+from zuuu_interfaces.srv import (DistanceToGoal, GetBatteryVoltage,
+                                 GetOdometry, GetZuuuMode, GetZuuuSafety,
+                                 ResetOdometry, SetSpeed, SetZuuuMode,
+                                 SetZuuuSafety)
 
 
 class ZuuuHAL(Node):
@@ -979,8 +975,11 @@ class ZuuuHAL(Node):
             x_vel, y_vel, theta_vel = dk_vel(
                 self.omnibase.left_wheel_rpm * pole_factor,
                 self.omnibase.right_wheel_rpm * pole_factor,
-                self.omnibase.back_wheel_rpm * pole_factor, self.omnibase.wheel_radius, self.omnibase.wheel_to_center)
-            
+                self.omnibase.back_wheel_rpm * pole_factor,
+                self.omnibase.wheel_radius,
+                self.omnibase.wheel_to_center,
+            )
+
             # Applying the small displacement in the world-fixed odom frame (simple 2D rotation)
             dx = (x_vel * math.cos(self.theta_odom) - y_vel * math.sin(self.theta_odom)) * dt_seconds
             dy = (x_vel * math.sin(self.theta_odom) + y_vel * math.cos(self.theta_odom)) * dt_seconds
@@ -1022,7 +1021,10 @@ class ZuuuHAL(Node):
             x_vel, y_vel, theta_vel = dk_vel(
                 self.calculated_wheel_speeds[2] * 60 / (2 * math.pi),  # rad/s to rpm
                 self.calculated_wheel_speeds[1] * 60 / (2 * math.pi),
-                self.calculated_wheel_speeds[0] * 60 / (2 * math.pi), self.omnibase.wheel_radius, self.omnibase.wheel_to_center)
+                self.calculated_wheel_speeds[0] * 60 / (2 * math.pi),
+                self.omnibase.wheel_radius,
+                self.omnibase.wheel_to_center,
+            )
 
             # Applying the small displacement in the world-fixed odom frame (simple 2D rotation)
             dx = (x_vel * math.cos(self.theta_odom) - y_vel * math.sin(self.theta_odom)) * dt_seconds
@@ -1338,7 +1340,9 @@ class ZuuuHAL(Node):
         x_vel, y_vel, theta_vel = self.limit_vel_commands(x_vel, y_vel, theta_vel)
 
         # IK calculations. From Robot's speed to wheels' speeds
-        self.calculated_wheel_speeds = ik_vel(x_vel, y_vel, theta_vel, self.omnibase.wheel_radius, self.omnibase.wheel_to_center)
+        self.calculated_wheel_speeds = ik_vel(
+            x_vel, y_vel, theta_vel, self.omnibase.wheel_radius, self.omnibase.wheel_to_center
+        )
 
         if self.fake_hardware:
             # In fake or Gazebo mode, the robot's speed is published directly and the mouvement is simulated
