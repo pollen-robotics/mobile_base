@@ -180,4 +180,5 @@ def test_ik_vs_dk():
 
 
 if __name__ == "__main__":
+    # Can be run with: python3 -m zuuu_hal.kinematics
     test_ik_vs_dk()
