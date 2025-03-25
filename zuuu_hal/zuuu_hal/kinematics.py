@@ -17,7 +17,6 @@ Some functions require a MobileBase instance (from mobile_base.py) to supply har
 and simulated robots.
 """
 
-import math
 from typing import List, Tuple
 
 import numpy as np
@@ -41,10 +40,10 @@ def ik_vel(x_vel: float, y_vel: float, rot_vel: float, mobile_base: MobileBase) 
     """
     wheel_rot_speed_back = (1 / mobile_base.wheel_radius) * (mobile_base.wheel_to_center * rot_vel - y_vel)
     wheel_rot_speed_right = (1 / mobile_base.wheel_radius) * (
-        mobile_base.wheel_to_center * rot_vel + y_vel / 2.0 + math.sin(math.pi / 3) * x_vel
+        mobile_base.wheel_to_center * rot_vel + y_vel / 2.0 + np.sin(np.pi / 3) * x_vel
     )
     wheel_rot_speed_left = (1 / mobile_base.wheel_radius) * (
-        mobile_base.wheel_to_center * rot_vel + math.sin(math.pi / 3) * y_vel / 2 - math.sin(math.pi / 3) * x_vel
+        mobile_base.wheel_to_center * rot_vel + y_vel / 2 - np.sin(np.pi / 3) * x_vel
     )
     return [wheel_rot_speed_back, wheel_rot_speed_right, wheel_rot_speed_left]
 
@@ -63,11 +62,11 @@ def dk_vel(rot_l: float, rot_r: float, rot_b: float, mobile_base: MobileBase) ->
         Tuple[float, float, float]: (x_vel, y_vel, theta_vel).
     """
     # Convert rpm to rad/s then to m/s.
-    speed_l = (2 * math.pi * rot_l / 60) * mobile_base.wheel_radius
-    speed_r = (2 * math.pi * rot_r / 60) * mobile_base.wheel_radius
-    speed_b = (2 * math.pi * rot_b / 60) * mobile_base.wheel_radius
+    speed_l = (2 * np.pi * rot_l / 60) * mobile_base.wheel_radius
+    speed_r = (2 * np.pi * rot_r / 60) * mobile_base.wheel_radius
+    speed_b = (2 * np.pi * rot_b / 60) * mobile_base.wheel_radius
 
-    x_vel = -speed_l * (1 / (2 * math.sin(math.pi / 3))) + speed_r * (1 / (2 * math.sin(math.pi / 3)))
+    x_vel = -speed_l * (1 / (2 * np.sin(np.pi / 3))) + speed_r * (1 / (2 * np.sin(np.pi / 3)))
     y_vel = -speed_b * 2 / 3.0 + speed_l * 1 / 3.0 + speed_r * 1 / 3.0
     theta_vel = (speed_l + speed_r + speed_b) / (3 * mobile_base.wheel_to_center)
     return x_vel, y_vel, theta_vel
@@ -137,6 +136,38 @@ def ik_vel_old(x: float, y: float, rot: float) -> List[float]:
         List[float]: A list of calculated values for the 3 cycles.
     """
     cycle_back = -y + rot
-    cycle_right = (-y * np.cos(120 * math.pi / 180)) + (x * np.sin(120 * math.pi / 180)) + rot
-    cycle_left = (-y * np.cos(240 * math.pi / 180)) + (x * np.sin(240 * math.pi / 180)) + rot
+    cycle_right = (-y * np.cos(120 * np.pi / 180)) + (x * np.sin(120 * np.pi / 180)) + rot
+    cycle_left = (-y * np.cos(240 * np.pi / 180)) + (x * np.sin(240 * np.pi / 180)) + rot
     return [cycle_back, cycle_right, cycle_left]
+
+
+def test_ik_vs_dk():
+    # Test the inverse and direct kinematics functions
+    omnibase = MobileBase(
+                left_wheel_id=24, right_wheel_id=72, back_wheel_id=None, fake_hardware=True
+            )
+    x_vel = 0.1
+    y_vel = 0.1
+    rot_vel = 0.1
+    wheel_rot_speeds = ik_vel(x_vel, y_vel, rot_vel, omnibase)
+    print("Desired velocities: x={}, y={}, rot={}".format(x_vel, y_vel, rot_vel))
+    wheel_rot_speeds = ik_vel(x_vel, y_vel, rot_vel, omnibase)
+    print("Wheel speeds: back={}, right={}, left={}".format(*wheel_rot_speeds))
+    x_vel, y_vel, rot_vel = dk_vel(wheel_rot_speeds[2] * 60 / (2 * np.pi), wheel_rot_speeds[1] * 60 / (2 * np.pi), wheel_rot_speeds[0] * 60 / (2 * np.pi), omnibase)
+    print("Recovered velocities: x={}, y={}, rot={}".format(x_vel, y_vel, rot_vel))
+    
+    # Test many combinations of velocities and check that we recover the same velocities
+    nb_tests = 0
+    for x_vel in np.linspace(-0.1, 0.1, 5):
+        for y_vel in np.linspace(-0.1, 0.1, 5):
+            for rot_vel in np.linspace(-0.1, 0.1, 5):
+                nb_tests += 1
+                wheel_rot_speeds = ik_vel(x_vel, y_vel, rot_vel, omnibase)
+                x_vel2, y_vel2, rot_vel2 = dk_vel(wheel_rot_speeds[2] * 60 / (2 * np.pi), wheel_rot_speeds[1] * 60 / (2 * np.pi), wheel_rot_speeds[0] * 60 / (2 * np.pi), omnibase)
+                assert np.isclose(x_vel, x_vel2)
+                assert np.isclose(y_vel, y_vel2)
+                assert np.isclose(rot_vel, rot_vel2)
+    print(f"All {nb_tests} tests passed!")
+
+if __name__ == "__main__":
+    test_ik_vs_dk()
