@@ -51,7 +51,7 @@ def generate_launch_description():
         Node(
             package="zuuu_hal",
             executable="hal",
-            name="zuuu_hal",
+            # name="zuuu_hal_du_launch", -> Not declaring the name here as it overrides the node names and creates conflicts
             parameters=[
                 config,
                 {"fake": fake_mode, "gazebo": gazebo_mode, "use_sim_time": use_sim_time},
