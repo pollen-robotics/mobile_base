@@ -197,6 +197,16 @@ ros2 param set /zuuu_hal laser_lower_angle -0.1
 ```
 
 ⚠ **Important:** The node **must** be run with its parameter file, or it will crash at launch (use `hal.launch.py` to ensure proper loading).
+⚠ **Important:** If you change the `params.yaml` file, you must recompile in your ROS2 workspace for the changes to apply.
+
+---
+
+## Useful commands
+
+Service call to tune the safety behavior:
+```sh
+ros2 service call /SetZuuuSafety zuuu_interfaces/srv/SetZuuuSafety "{safety_on: True, safety_distance: 0.55}"
+```
 
 ---
 
