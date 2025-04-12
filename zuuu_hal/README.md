@@ -191,9 +191,18 @@ The parameter configuration file is located at:
 config/params.yaml
 ```
 
-Example: Dynamically changing the LiDAR angular limits:
+Examples: 
+Dynamically changing the LiDAR angular limits:
 ```sh
 ros2 param set /zuuu_hal laser_lower_angle -0.1
+```
+Checking the current control_mode
+```sh
+ros2 param get /zuuu_hal control_mode
+```
+Changing the current control_mode:
+```sh
+ros2 param set /zuuu_hal control_mode "PID"
 ```
 
 ⚠ **Important:** The node **must** be run with its parameter file, or it will crash at launch (use `hal.launch.py` to ensure proper loading).
