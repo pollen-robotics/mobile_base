@@ -1,4 +1,7 @@
 # Packages to control the mobile base Zuuu in ROS2
+<p align="center">
+  <img src="img/mobile_base.png" alt="Mobile Base" />
+</p>
 ## Packages
 
 * [zuuu_hal](./zuuu_hal/) - Hardware Abstraction Layer for the mobile base, ROSifies the inputs and outputs.
