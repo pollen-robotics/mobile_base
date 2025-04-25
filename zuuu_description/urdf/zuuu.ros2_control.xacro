@@ -3,58 +3,58 @@
 
   <xacro:macro name="zuuu_ros2_control" params="model prefix">
     <ros2_control name="zuuu_ros2_control" type="system">
-    <hardware>
+      <hardware>
         <xacro:if value="$(arg use_fake_components)">
+          <!-- If gazebo mode is enabled -->
           <xacro:if value="$(arg use_gazebo)">
             <plugin>gazebo_ros2_control/GazeboSystem</plugin>
           </xacro:if>
+          <!-- Else, when gazebo is not enabled -->
           <xacro:unless value="$(arg use_gazebo)">
-            <plugin>fake_components/GenericSystem</plugin>
+            <!-- If mujoco mode is enabled -->
+            <xacro:if value="$(arg use_mujoco)">
+              <plugin>mujoco_ros2_control/MujocoSystem</plugin>
+            </xacro:if>
+            <!-- If neither gazebo nor mujoco are enabled -->
+            <xacro:unless value="$(arg use_mujoco)">
+              <plugin>fake_components/GenericSystem</plugin>
+            </xacro:unless>
           </xacro:unless>
         </xacro:if>
-
-
-        <!-- <xacro:if value="$(arg use_fake_components)"> -->
-        <!-- <plugin>fake_components/GenericSystem</plugin> -->
-        <!-- </xacro:if> -->
-        <!-- <xacro:unless value="$(arg use_fake_components)"> -->
-        <!-- <plugin>gazebo_ros2_control/GazeboSystem</plugin> -->
-        <!-- </xacro:unless> -->
-
-    </hardware>
-    <joint name="drivewhl1_joint">
+      </hardware>
+      <joint name="drivewhl1_joint">
         <command_interface name="velocity">
-            <param name="min">-1</param>
-            <param name="max">1</param>
+          <param name="min">-1</param>
+          <param name="max">1</param>
         </command_interface>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-    </joint>
-    <joint name="drivewhl2_joint">
+        <state_interface name="position" />
+        <state_interface name="velocity" />
+      </joint>
+      <joint name="drivewhl2_joint">
         <command_interface name="velocity">
-            <param name="min">-1</param>
-            <param name="max">1</param>
+          <param name="min">-1</param>
+          <param name="max">1</param>
         </command_interface>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-    </joint>
-    <joint name="drivewhl3_joint">
+        <state_interface name="position" />
+        <state_interface name="velocity" />
+      </joint>
+      <joint name="drivewhl3_joint">
         <command_interface name="velocity">
-            <param name="min">-1</param>
-            <param name="max">1</param>
+          <param name="min">-1</param>
+          <param name="max">1</param>
         </command_interface>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-    </joint>
+        <state_interface name="position" />
+        <state_interface name="velocity" />
+      </joint>
     </ros2_control>
 
     <!-- Calling the pluging that will parse the ros2_control tags -->
     <xacro:unless value="$(arg use_fake_components)">
-        <gazebo>
-            <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
-            <parameters>$(find zuuu_description)/config/zuuu_controllers.yaml</parameters>
-            </plugin>
-        </gazebo>
+      <gazebo>
+        <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
+          <parameters>$(find zuuu_description)/config/zuuu_controllers.yaml</parameters>
+        </plugin>
+      </gazebo>
     </xacro:unless>
   </xacro:macro>
 </robot>
