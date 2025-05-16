@@ -33,7 +33,7 @@ from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from reachy_config import ReachyConfig
 from sensor_msgs.msg import Image, LaserScan
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Float64MultiArray
 from tf2_ros import TransformBroadcaster
 
 from zuuu_hal.kinematics import (dk_vel, ik_vel, pwm_to_wheel_rot_speed,
@@ -82,15 +82,19 @@ class ZuuuHAL(Node):
     def _init_fake_hardware(self) -> None:
         self.declare_parameter("fake", False)
         self.declare_parameter("gazebo", False)
+        self.declare_parameter("mujoco", False)
 
-        self.fake_mode: bool = self.get_parameter("fake").value and not self.get_parameter("gazebo").value
+        self.fake_mode: bool = self.get_parameter("fake").value and not self.get_parameter("gazebo").value and not self.get_parameter("mujoco").value
         self.gazebo_mode: bool = self.get_parameter("gazebo").value
-        self.fake_hardware: bool = self.gazebo_mode or self.fake_mode
+        self.mujoco_mode: bool = self.get_parameter("mujoco").value
+        self.fake_hardware: bool = self.gazebo_mode or self.fake_mode or self.mujoco_mode
 
         if self.fake_mode:
             self.get_logger().info("Running zuuu_hal in FAKE mode. No LIDAR and the odometry is perfect.\n")
         elif self.gazebo_mode:
             self.get_logger().info("Running zuuu_hal in GAZEBO mode (simulated hardware)\n")
+        elif self.mujoco_mode:
+            self.get_logger().info("Running zuuu_hal in MUJOCO mode (simulated hardware)\n")
         else:
             self.get_logger().info("Running zuuu_hal on physical hardware\n")
 
@@ -284,6 +288,10 @@ class ZuuuHAL(Node):
                 self.gazebo_odom_callback,
                 QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT),
             )
+
+        if self.mujoco_mode:
+            self.pub_wheels_rpm = self.create_publisher(Float64MultiArray, '/zuuu_forward_command_controller/commands', 10)
+
         self.scan_pub = self.create_publisher(LaserScan, "scan_filterd", 10)
         self.lidar_image_pub = self.create_publisher(Image, "lidar_image", 1)
 
@@ -666,6 +674,11 @@ class ZuuuHAL(Node):
             else:
                 rpm_left.data = float(self.omnibase.left_wheel_measurements.rpm)
             self.pub_left_wheel_rpm.publish(rpm_left)
+
+        if self.mujoco_mode:
+            # In MuJoCo mode, publish the wheel speeds as a Float64MultiArray in radians per second
+            mujoco_wheels = [self.calculated_wheel_speeds[2], self.calculated_wheel_speeds[1], self.calculated_wheel_speeds[0]]
+            self.pub_wheels_rpm.publish(Float64MultiArray(data=[x / (2*math.pi/60) for x in mujoco_wheels]))
 
     def publish_fake_robot_speed(self, x_vel, y_vel, theta_vel) -> None:
         """Publishes the current robot speed (Twist type)"""
