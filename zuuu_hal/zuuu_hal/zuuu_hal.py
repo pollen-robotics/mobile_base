@@ -199,13 +199,23 @@ class ZuuuHAL(Node):
         self.x_odom_gazebo_old: float = 0.0
         self.y_odom_gazebo_old: float = 0.0
         self.theta_odom_gazebo_old: float = 0.0
+        self.x_odom_mujoco: float = 0.0
+        self.y_odom_mujoco: float = 0.0
+        self.theta_odom_mujoco: float = 0.0
+        self.x_odom_mujoco_old: float = 0.0
+        self.y_odom_mujoco_old: float = 0.0
+        self.theta_odom_mujoco_old: float = 0.0
         self.theta_zuuu_vs_gazebo: float = 0.0
+        self.theta_zuuu_vs_mujoco: float = 0.0
         self.vx: float = 0.0
         self.vy: float = 0.0
         self.vtheta: float = 0.0
         self.vx_gazebo: float = 0.0
         self.vy_gazebo: float = 0.0
         self.vtheta_gazebo: float = 0.0
+        self.vx_mujoco: float = 0.0
+        self.vy_mujoco: float = 0.0
+        self.vtheta_mujoco: float = 0.0
         self.x_vel_goal: float = 0.0
         self.y_vel_goal: float = 0.0
         self.theta_vel_goal: float = 0.0
@@ -291,6 +301,14 @@ class ZuuuHAL(Node):
 
         if self.mujoco_mode:
             self.pub_wheels_rpm = self.create_publisher(Float64MultiArray, '/zuuu_forward_command_controller/commands', 10)
+
+            # In Mojoco mode subscribe to the odom topic published by the mujoco plugin.
+            self.odom_sub = self.create_subscription(
+                Odometry,
+                "odom_mujoco",
+                self.mujoco_odom_callback,
+                QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT),
+            )
 
         self.scan_pub = self.create_publisher(LaserScan, "scan_filterd", 10)
         self.lidar_image_pub = self.create_publisher(Image, "lidar_image", 1)
@@ -479,6 +497,20 @@ class ZuuuHAL(Node):
         self.y_odom_gazebo = msg.pose.pose.position.y
         q = msg.pose.pose.orientation
         _, _, self.theta_odom_gazebo = tf_transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
+        self.get_logger().error(f"self.theta_odom_gazebo : {self.theta_odom_gazebo:.2f} rad")
+
+    def mujoco_odom_callback(self, msg: Odometry) -> None:
+        """Callback method on the /odom_mujoco topic used in Mujoco mode"""
+        self.vx_mujoco = msg.twist.twist.linear.x
+        self.vy_mujoco = msg.twist.twist.linear.y
+        self.vtheta_mujoco = msg.twist.twist.angular.z
+
+        # reading the odometry from the mujoco plugin
+        self.x_odom_mujoco = msg.pose.pose.position.x
+        self.y_odom_mujoco = msg.pose.pose.position.y
+        q = msg.pose.pose.orientation
+        _, _, self.theta_odom_mujoco = tf_transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
+        self.get_logger().error(f"self.theta_odom_mujoco : {self.theta_odom_mujoco:.2f} rad")
 
     def check_battery_callback(self, verbose: bool = False) -> None:
         """Checks that the battery readings are not too old and forces a read if need be.
@@ -1030,6 +1062,25 @@ class ZuuuHAL(Node):
             self.x_odom_gazebo_old = self.x_odom_gazebo
             self.y_odom_gazebo_old = self.y_odom_gazebo
             self.theta_odom_gazebo_old = self.theta_odom_gazebo
+        elif self.mujoco_mode:
+            self.vx = self.vx_mujoco
+            self.vy = self.vy_mujoco
+            self.vtheta = self.vtheta_mujoco
+
+            # This is the small displacement in the world-fixed Mujoco odom frame (that never resets)
+            dx_mujoco = self.x_odom_mujoco - self.x_odom_mujoco_old
+            dy_mujoco = self.y_odom_mujoco - self.y_odom_mujoco_old
+            dx = dx_mujoco * math.cos(self.theta_zuuu_vs_mujoco) - dy_mujoco * math.sin(self.theta_zuuu_vs_mujoco)
+            dy = dx_mujoco * math.sin(self.theta_zuuu_vs_mujoco) + dy_mujoco * math.cos(self.theta_zuuu_vs_mujoco)
+            dtheta = angle_diff(self.theta_odom_mujoco, self.theta_odom_mujoco_old)
+
+            self.x_odom += dx
+            self.y_odom += dy
+            self.theta_odom += dtheta
+
+            self.x_odom_mujoco_old = self.x_odom_mujoco
+            self.y_odom_mujoco_old = self.y_odom_mujoco
+            self.theta_odom_mujoco_old = self.theta_odom_mujoco
         elif self.fake_hardware:
             x_vel, y_vel, theta_vel = dk_vel(
                 self.calculated_wheel_speeds[2] * 60 / (2 * math.pi),  # rad/s to rpm
@@ -1150,6 +1201,8 @@ class ZuuuHAL(Node):
 
         if self.gazebo_mode:
             self.theta_zuuu_vs_gazebo -= self.theta_odom
+        if self.mujoco_mode:
+            self.theta_zuuu_vs_mujoco -= self.theta_odom
 
         self.x_odom = 0.0
         self.y_odom = 0.0
