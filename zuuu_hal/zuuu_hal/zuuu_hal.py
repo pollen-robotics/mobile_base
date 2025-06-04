@@ -1,7 +1,7 @@
 """
 Zuuu's Hardware Abstraction Layer main node.
 'Hardware' here means the three wheel controllers, the battery and the LIDAR.
-The responsibility of the node is to read the sensors, handle common calculations 
+The responsibility of the node is to read the sensors, handle common calculations
 (filtering, odometry, inverse kinematics) and expose control interfaces.
 
 See params.yaml for the list of ROS parameters.
@@ -497,7 +497,6 @@ class ZuuuHAL(Node):
         self.y_odom_gazebo = msg.pose.pose.position.y
         q = msg.pose.pose.orientation
         _, _, self.theta_odom_gazebo = tf_transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
-        self.get_logger().error(f"self.theta_odom_gazebo : {self.theta_odom_gazebo:.2f} rad")
 
     def mujoco_odom_callback(self, msg: Odometry) -> None:
         """Callback method on the /odom_mujoco topic used in Mujoco mode"""
@@ -510,7 +509,6 @@ class ZuuuHAL(Node):
         self.y_odom_mujoco = msg.pose.pose.position.y
         q = msg.pose.pose.orientation
         _, _, self.theta_odom_mujoco = tf_transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
-        self.get_logger().error(f"self.theta_odom_mujoco : {self.theta_odom_mujoco:.2f} rad")
 
     def check_battery_callback(self, verbose: bool = False) -> None:
         """Checks that the battery readings are not too old and forces a read if need be.
@@ -709,8 +707,9 @@ class ZuuuHAL(Node):
 
         if self.mujoco_mode:
             # In MuJoCo mode, publish the wheel speeds as a Float64MultiArray in radians per second
-            mujoco_wheels = [self.calculated_wheel_speeds[2], self.calculated_wheel_speeds[1], self.calculated_wheel_speeds[0]]
-            self.pub_wheels_rpm.publish(Float64MultiArray(data=[x / (2*math.pi/60) for x in mujoco_wheels]))
+            mujoco_wheels = [self.calculated_wheel_speeds[1], self.calculated_wheel_speeds[2], self.calculated_wheel_speeds[0]]
+            # self.pub_wheels_rpm.publish(Float64MultiArray(data=[x / (2*math.pi/60) for x in mujoco_wheels]))
+            # self.pub_wheels_rpm.publish(Float64MultiArray(data=[x * 10 for x in mujoco_wheels]))
 
     def publish_fake_robot_speed(self, x_vel, y_vel, theta_vel) -> None:
         """Publishes the current robot speed (Twist type)"""
@@ -1120,6 +1119,7 @@ class ZuuuHAL(Node):
             self.x_vel_goal = self.cmd_vel.linear.x
             self.y_vel_goal = self.cmd_vel.linear.y
             self.theta_vel_goal = self.cmd_vel.angular.z
+            self.get_logger().error(f"self.x_vel_goal : {self.x_vel_goal}")
         else:
             self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = 0.0, 0.0, 0.0
 
@@ -1410,6 +1410,9 @@ class ZuuuHAL(Node):
             x_vel, y_vel, theta_vel, self.omnibase.wheel_radius, self.omnibase.wheel_to_center
         )
 
+        # if self.mujoco_mode:
+        #     mujoco_wheels = [self.calculated_wheel_speeds[1], self.calculated_wheel_speeds[2], self.calculated_wheel_speeds[0]]
+        #     self.pub_wheels_rpm.publish(Float64MultiArray(data=[x * 20 for x in mujoco_wheels]))
         if self.fake_hardware:
             # In fake or Gazebo mode, the robot's speed is published directly and the mouvement is simulated
             self.publish_fake_robot_speed(x_vel, y_vel, theta_vel)
