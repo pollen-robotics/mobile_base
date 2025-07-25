@@ -708,8 +708,7 @@ class ZuuuHAL(Node):
         if self.mujoco_mode:
             # In MuJoCo mode, publish the wheel speeds as a Float64MultiArray in radians per second
             mujoco_wheels = [self.calculated_wheel_speeds[1], self.calculated_wheel_speeds[2], self.calculated_wheel_speeds[0]]
-            # self.pub_wheels_rpm.publish(Float64MultiArray(data=[x / (2*math.pi/60) for x in mujoco_wheels]))
-            # self.pub_wheels_rpm.publish(Float64MultiArray(data=[x * 10 for x in mujoco_wheels]))
+            self.pub_wheels_rpm.publish(Float64MultiArray(data=[x / (2*math.pi/60) for x in mujoco_wheels]))
 
     def publish_fake_robot_speed(self, x_vel, y_vel, theta_vel) -> None:
         """Publishes the current robot speed (Twist type)"""
