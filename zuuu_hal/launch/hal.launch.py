@@ -31,12 +31,18 @@ def generate_launch_description():
             default_value="False",
             description="Flag to indicate gazebo mode",
         ),
+        DeclareLaunchArgument(
+            name="mujoco",
+            default_value="False",
+            description="Flag to indicate mujoco mode",
+        ),
     ]
 
     # Retrieve the launch configurations
     use_sim_time = LaunchConfiguration("use_sim_time")
     fake_mode = LaunchConfiguration("fake")
     gazebo_mode = LaunchConfiguration("gazebo")
+    mujoco_mode = LaunchConfiguration("mujoco")
 
     # Conditionally include the LIDAR launch file only if not in simulation mode
     launches = [
@@ -54,7 +60,7 @@ def generate_launch_description():
             # name="zuuu_hal_du_launch", -> Not declaring the name here as it overrides the node names and creates conflicts
             parameters=[
                 config,
-                {"fake": fake_mode, "gazebo": gazebo_mode, "use_sim_time": use_sim_time},
+                {"fake": fake_mode, "gazebo": gazebo_mode, "mujoco": mujoco_mode, "use_sim_time": use_sim_time},
             ],
         )
     ]
