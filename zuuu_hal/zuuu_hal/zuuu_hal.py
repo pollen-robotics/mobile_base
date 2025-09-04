@@ -1118,7 +1118,6 @@ class ZuuuHAL(Node):
             self.x_vel_goal = self.cmd_vel.linear.x
             self.y_vel_goal = self.cmd_vel.linear.y
             self.theta_vel_goal = self.cmd_vel.angular.z
-            self.get_logger().error(f"self.x_vel_goal : {self.x_vel_goal}")
         else:
             self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal = 0.0, 0.0, 0.0
 
