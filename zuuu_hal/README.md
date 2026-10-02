@@ -155,6 +155,31 @@ The **Goto** action allows Zuuu to move to a specific goal position in the **odo
 ros2 run zuuu_hal goto_client_test
 ```
 
+### Staged goto and tuning
+
+With `goto_strategy: "staged"` (default in `config/params.yaml`), a goto is executed in phases instead of running
+both PIDs together from the start:
+
+1. **ALIGN**: rotate in place to face the goal (see `goto_heading_mode`),
+2. **DRIVE**: drive straight to the goal; the heading loop stays active, so a push gets corrected,
+3. **TURN**: rotate in place to the final orientation while holding the position,
+4. **PARKED**: inside the park tolerances the wheels are braked instead of hunting around the goal.
+
+Speeds follow `min(max_command, sqrt(2 * decel * error), precision_p * error)`: soft braking, then a gain that rises
+as the goal gets closer (precision phase), without stopping before the goal. When the base is stuck short of the
+goal (static friction), a breakaway term ramps the command up until it moves. `goto_strategy: "legacy"` restores the
+previous behaviour. Every `goto_*` parameter is documented in `config/params.yaml` and can be changed live:
+
+```sh
+ros2 param set /zuuu_hal goto_precision_p_xy 12.0
+ros2 param set /zuuu_hal goto_strategy legacy
+```
+
+Note that the SDK's `goto()` returns as soon as the base is within `distance_tolerance` (default 5 cm) and
+`angle_tolerance` (default 5°) of the goal: pass smaller values to wait for a precise arrival.
+[`examples/goto_tuning.py`](examples/goto_tuning.py) measures the precision of a sequence of gotos on your floor
+(`bench`) and the smallest command that moves the base from rest (`breakaway`).
+
 ---
 
 ## Odometry
