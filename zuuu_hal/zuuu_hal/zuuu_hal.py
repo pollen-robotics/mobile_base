@@ -47,6 +47,15 @@ from zuuu_interfaces.srv import (DistanceToGoal, GetBatteryVoltage,
                                  ResetOdometry, SetSpeed, SetZuuuMode,
                                  SetZuuuSafety)
 
+# Parameters of the staged goto (GOTO mode only), documented in config/params.yaml.
+# They can be changed live with `ros2 param set /zuuu_hal <name> <value>`.
+GOTO_PARAM_DEFAULTS = {
+    "goto_strategy": "staged",  # "staged" (staged_goto_tick) or "legacy" (goto_tick)
+    "goto_align_tolerance": 0.15,  # rad
+    "goto_aim_distance": 0.15,  # m
+    "goto_turn_distance": 0.03,  # m
+}
+
 
 class ZuuuHAL(Node):
     """Zuuu's Hardware Abstraction Layer node."""
@@ -187,6 +196,10 @@ class ZuuuHAL(Node):
         self.critical_distance: float = self.get_parameter("critical_distance").get_parameter_value().double_value
         self.safety_on: bool = self.get_parameter("safety_on").get_parameter_value().bool_value
 
+        self.declare_parameters(namespace="", parameters=list(GOTO_PARAM_DEFAULTS.items()))
+        for name in GOTO_PARAM_DEFAULTS:
+            setattr(self, name, self.get_parameter(name).value)
+
     def _init_state_variables(self) -> None:
         # Initialize state variables.
         self.cmd_vel: Optional[Twist] = None
@@ -238,6 +251,11 @@ class ZuuuHAL(Node):
         self.stationary_on: bool = False
         self.already_shutdown: bool = False
         self.nb_full_com_fails: int = 0
+        # Staged goto state. The goto action server increments goto_goal_id for every new goal.
+        self.goto_goal_id: int = 0
+        self.goto_active_goal_id: int = -1
+        self.goto_phase: str = "ALIGN"
+        self.goto_hold_theta: float = 0.0
 
         self.lidar_safety = LidarSafety(
             self.safety_distance,
@@ -372,7 +390,15 @@ class ZuuuHAL(Node):
         """When a ROS parameter is changed, this method will be called to verify the change and accept/deny it."""
         success = False
         for param in params:
-            if param.type_ in [Parameter.Type.DOUBLE, Parameter.Type.INTEGER]:
+            if param.name in GOTO_PARAM_DEFAULTS:
+                if param.name == "goto_strategy":
+                    valid = param.value in ("staged", "legacy")
+                else:
+                    valid = isinstance(param.value, (int, float)) and param.value > 0
+                if valid:
+                    setattr(self, param.name, param.value)
+                    success = True
+            elif param.type_ in [Parameter.Type.DOUBLE, Parameter.Type.INTEGER]:
                 if param.name == "laser_upper_angle":
                     self.laser_upper_angle = param.value
                     success = True
@@ -973,7 +999,10 @@ class ZuuuHAL(Node):
             elif self.mode is ZuuuModes.SPEED:
                 self.speed_mode_tick()
             elif self.mode is ZuuuModes.GOTO:
-                self.goto_tick()
+                if self.goto_strategy == "staged":
+                    self.staged_goto_tick()
+                else:
+                    self.goto_tick()
             elif self.mode is ZuuuModes.CMD_GOTO:
                 self.cmd_goto_tick()
             # Here, the following values have been calculated: self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal
@@ -1177,6 +1206,57 @@ class ZuuuHAL(Node):
         self.x_vel_goal = x_command
         self.y_vel_goal = y_command
         self.theta_vel_goal = angle_command
+
+    def staged_goto_tick(self) -> None:
+        """Tick function for the GOTO mode when goto_strategy is "staged".
+
+        goto_tick controls the position and the final orientation at the same time, so the base rotates while it
+        translates. Here the motion is split in phases, using the same P controllers as goto_tick:
+            ALIGN: rotate in place to face the goal,
+            DRIVE: drive straight to the goal. The heading loop stays active and keeps aiming at the goal, so a push
+                   gets corrected. Closer than goto_aim_distance the heading is simply held,
+            TURN:  closer than goto_turn_distance, rotate to the final orientation while the position loop keeps
+                   holding the goal.
+        Moves shorter than goto_aim_distance start directly in TURN (position and orientation together, like goto_tick):
+        no turning around to face a 5 cm correction.
+        """
+        dx = self.x_goal - self.x_odom
+        dy = self.y_goal - self.y_odom
+        distance = math.sqrt(dx**2 + dy**2)
+        # Same convention as goto_tick and the action server: not wrapped, the user chooses the turn
+        final_angle_error = self.theta_goal - self.theta_odom
+
+        if self.goto_active_goal_id != self.goto_goal_id:
+            # New goal. A counter written only by the action server thread, so that a new goal can't be missed.
+            self.goto_active_goal_id = self.goto_goal_id
+            self.goto_hold_theta = self.theta_odom
+            self.set_goto_phase("ALIGN" if distance > self.goto_aim_distance else "TURN")
+
+        if self.goto_phase in ("ALIGN", "DRIVE") and distance > self.goto_aim_distance:
+            # Aim at the goal (close to it, the direction to the goal is too sensitive to small errors)
+            self.goto_hold_theta = self.theta_odom + angle_diff(math.atan2(dy, dx), self.theta_odom)
+        heading_error = self.goto_hold_theta - self.theta_odom
+
+        if self.goto_phase == "ALIGN" and abs(heading_error) < self.goto_align_tolerance:
+            self.set_goto_phase("DRIVE")
+        elif self.goto_phase == "DRIVE" and distance < self.goto_turn_distance:
+            self.set_goto_phase("TURN")
+
+        # Same P controllers as goto_tick (gains from the goto request)
+        xy_speed = 0.0 if self.goto_phase == "ALIGN" else -self.distance_pid.tick(distance)
+        angle_error = heading_error if self.goto_phase in ("ALIGN", "DRIVE") else final_angle_error
+        self.theta_vel_goal = self.angle_pid.tick(-angle_error)
+        if distance == 0:
+            self.x_vel_goal, self.y_vel_goal = 0.0, 0.0
+        else:
+            # Unit vector towards the goal, from the odom frame to the robot frame, scaled by the speed
+            cos_t, sin_t = math.cos(self.theta_odom), math.sin(self.theta_odom)
+            self.x_vel_goal = xy_speed * (dx * cos_t + dy * sin_t) / distance
+            self.y_vel_goal = xy_speed * (-dx * sin_t + dy * cos_t) / distance
+
+    def set_goto_phase(self, phase: str) -> None:
+        self.get_logger().info(f"goto phase {self.goto_phase} -> {phase}")
+        self.goto_phase = phase
 
     def cmd_goto_tick(self):
         t = time.time()
