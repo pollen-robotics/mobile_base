@@ -70,6 +70,10 @@ GOTO_PARAM_DEFAULTS = {
     "goto_unpark_factor": 3.0,
 }
 GOTO_PARAM_CHOICES = {"goto_strategy": ("staged", "legacy"), "goto_heading_mode": ("face_target", "keep", "final")}
+GOTO_PARAM_STRICTLY_POSITIVE = (
+    "goto_align_tolerance", "goto_decel_xy", "goto_decel_theta", "goto_precision_p_xy", "goto_precision_p_theta",
+    "goto_park_dist_tol", "goto_park_angle_tol",
+)
 
 
 class ZuuuHAL(Node):
@@ -268,6 +272,8 @@ class ZuuuHAL(Node):
         self.nb_full_com_fails: int = 0
         # Staged goto state, reset by the goto action server for every new goal
         self.goto_phase: Optional[str] = None
+        self.goto_goal_id: int = 0  # incremented by the goto action server for every new goal
+        self.goto_active_goal_id: int = -1
         self.goto_short_move: bool = False
         self.goto_hold_theta: float = 0.0
         self.goto_xy_cmd: float = 0.0
@@ -413,8 +419,14 @@ class ZuuuHAL(Node):
                     valid = param.value in GOTO_PARAM_CHOICES[param.name]
                 elif isinstance(GOTO_PARAM_DEFAULTS[param.name], bool):
                     valid = isinstance(param.value, bool)
+                elif not isinstance(param.value, (int, float)):
+                    valid = False
+                elif param.name in GOTO_PARAM_STRICTLY_POSITIVE:
+                    valid = param.value > 0
+                elif param.name == "goto_unpark_factor":
+                    valid = param.value >= 1
                 else:
-                    valid = isinstance(param.value, (int, float)) and param.value >= 0
+                    valid = param.value >= 0
                 if valid:
                     setattr(self, param.name, param.value)
                     success = True
@@ -1254,12 +1266,10 @@ class ZuuuHAL(Node):
         park_angle = min(self.goto_park_angle_tol, self.goto_action_server.angle_tol / 2.0)
         turn_dist = max(self.goto_turn_radius, park_dist)
 
-        if self.goto_phase is None:
-            # New goal. Short moves keep their heading: no turning around for a 5 cm correction.
-            self.goto_short_move = distance < self.goto_min_drive_distance
-            self.goto_hold_theta = self.theta_goal if self.goto_heading_mode == "final" else self.theta_odom
-            self.goto_xy_cmd = 0.0
-            self.set_goto_phase("DRIVE" if self.goto_short_move else "ALIGN", distance, final_angle_error)
+        if self.goto_active_goal_id != self.goto_goal_id:
+            # New goal (checked with a counter: a phase reset written by the action server thread could be lost)
+            self.goto_active_goal_id = self.goto_goal_id
+            self.start_goto_motion(distance, final_angle_error)
 
         if self.goto_heading_mode == "face_target" and not self.goto_short_move and distance > self.goto_heading_freeze_radius:
             # Look at the goal, or turn the back to it when that is a shorter rotation (if allowed)
@@ -1277,10 +1287,13 @@ class ZuuuHAL(Node):
             phase = "TURN"
         elif phase == "TURN" and distance < park_dist and abs(final_angle_error) < park_angle:
             phase = "PARKED"
-        elif phase == "PARKED" and (distance > unpark * park_dist or abs(final_angle_error) > unpark * park_angle):
-            phase = "TURN" if distance < unpark * turn_dist else "DRIVE"
-        if phase != self.goto_phase:
+        if phase == "PARKED" and (distance > unpark * park_dist or abs(final_angle_error) > unpark * park_angle):
+            # Pushed away from the goal: start over from where the robot is now
+            self.start_goto_motion(distance, final_angle_error)
+            heading_error = self.goto_hold_theta - self.theta_odom
+        elif phase != self.goto_phase:
             self.set_goto_phase(phase, distance, final_angle_error)
+        phase = self.goto_phase
 
         max_xy = self.distance_pid.max_command
         max_theta = self.angle_pid.max_command
@@ -1315,13 +1328,13 @@ class ZuuuHAL(Node):
         xy_target = distance > (park_dist if phase == "TURN" else turn_dist)
         if phase in ("DRIVE", "TURN") and xy_target and window_full and old_distance - distance < 0.001:
             self.goto_boost_xy = min(self.goto_boost_xy + self.goto_breakaway_rate_xy * dt, max_xy)
-            xy_speed += self.goto_boost_xy
+            xy_speed = min(xy_speed + self.goto_boost_xy, max_xy)
         else:
             self.goto_boost_xy = 0.0
         theta_target = abs(theta_error) > (park_angle if phase == "TURN" else self.goto_align_tolerance)
         if phase in ("ALIGN", "TURN") and theta_target and window_full and old_theta_error - abs(theta_error) < 0.003:
             self.goto_boost_theta = min(self.goto_boost_theta + self.goto_breakaway_rate_theta * dt, max_theta)
-            theta_speed += math.copysign(self.goto_boost_theta, theta_error)
+            theta_speed = max(-max_theta, min(max_theta, theta_speed + math.copysign(self.goto_boost_theta, theta_error)))
         else:
             self.goto_boost_theta = 0.0
 
@@ -1336,13 +1349,21 @@ class ZuuuHAL(Node):
         e = abs(error)
         return math.copysign(min(max_speed, math.sqrt(2.0 * decel * e), precision_p * e), error)
 
+    def start_goto_motion(self, distance: float, angle_error: float) -> None:
+        """(Re)starts the staged goto from the current pose. Short moves keep their heading: no turning around for a
+        5 cm correction."""
+        self.goto_short_move = distance < self.goto_min_drive_distance
+        self.goto_hold_theta = self.theta_goal if self.goto_heading_mode == "final" else self.theta_odom
+        self.goto_xy_cmd = 0.0
+        self.set_goto_phase("DRIVE" if self.goto_short_move else "ALIGN", distance, angle_error)
+
     def set_goto_phase(self, phase: str, distance: float, angle_error: float) -> None:
         self.get_logger().info(
             f"goto phase {self.goto_phase} -> {phase} (distance {distance * 1000:.1f} mm, "
             f"final angle error {math.degrees(angle_error):.2f} deg)"
         )
         self.goto_phase = phase
-        self.goto_history = deque(maxlen=max(2, int(round(0.1 / self.main_tick_period)) + 1))
+        self.goto_history = deque(maxlen=max(2, int(round(0.1 / max(self.main_tick_period, 0.001))) + 1))
         self.goto_boost_xy, self.goto_boost_theta = 0.0, 0.0
 
     def cmd_goto_tick(self):

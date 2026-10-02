@@ -119,7 +119,8 @@ def cmd_breakaway(reachy, args):
         results[name] = (found, unit)
     print("\nSmallest command that moves the base from rest:")
     for name, (found, unit) in results.items():
-        print(f"  {name:>5}: {found if found is not None else 'not found'} {unit}")
+        extra = f" = {math.radians(found):.2f} rad/s" if (found is not None and unit == "deg/s") else ""
+        print(f"  {name:>5}: {found if found is not None else 'not found'} {unit}{extra}")
     print("To start a correction of e from rest, the go-to must command at least this much: with the staged go-to,")
     print("goto_precision_p_xy * e (m) or goto_precision_p_theta * e (rad) must reach it, or the breakaway term")
     print("(goto_breakaway_rate_*) will ramp up to it after a short wait.")
