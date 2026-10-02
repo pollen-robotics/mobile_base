@@ -39,7 +39,9 @@ def odom(reachy):
 
 
 def errors(pose, goal):
-    return 1000 * math.hypot(pose[0] - goal[0], pose[1] - goal[1]), pose[2] - goal[2]
+    # The SDK reports theta wrapped to [-180, 180[ while goals can be any angle (e.g. 270 or 360 deg)
+    angle_error = (pose[2] - goal[2] + 180.0) % 360.0 - 180.0
+    return 1000 * math.hypot(pose[0] - goal[0], pose[1] - goal[1]), angle_error
 
 
 def cmd_odom(reachy, args):
