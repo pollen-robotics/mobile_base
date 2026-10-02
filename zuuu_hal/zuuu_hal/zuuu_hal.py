@@ -1264,15 +1264,17 @@ class ZuuuHAL(Node):
             self.goto_precision_t0 = time.time()
             # Signed errors on each axis of the odom frame, so that the integral terms can unwind
             pids = []
-            for goal, p, i, d, max_command in (
-                (self.x_goal, self.goto_precision_p_xy, self.goto_precision_i_xy, self.goto_precision_d_xy,
+            for goal, current, p, i, d, max_command in (
+                (self.x_goal, self.x_odom, self.goto_precision_p_xy, self.goto_precision_i_xy, self.goto_precision_d_xy,
                  self.distance_pid.max_command),
-                (self.y_goal, self.goto_precision_p_xy, self.goto_precision_i_xy, self.goto_precision_d_xy,
+                (self.y_goal, self.y_odom, self.goto_precision_p_xy, self.goto_precision_i_xy, self.goto_precision_d_xy,
                  self.distance_pid.max_command),
-                (self.theta_goal, self.goto_precision_p_theta, self.goto_precision_i_theta, self.goto_precision_d_theta,
-                 self.angle_pid.max_command),
+                (self.theta_goal, self.theta_odom, self.goto_precision_p_theta, self.goto_precision_i_theta,
+                 self.goto_precision_d_theta, self.angle_pid.max_command),
             ):
                 pid = PID(p=p, i=i, d=d, max_command=max_command, max_i_contribution=max_command / 2.0)
+                # Start from the current measurement, otherwise the first derivative term sees a jump from 0
+                pid.current_value = current
                 pid.set_goal(goal)
                 pids.append(pid)
             self.goto_precision_pids = pids
