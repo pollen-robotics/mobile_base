@@ -55,6 +55,7 @@ GOTO_PARAM_DEFAULTS = {
     "goto_aim_distance": 0.15,  # m
     "goto_turn_distance": 0.03,  # m
     "goto_precision_duration": 3.0,  # s, 0 disables the PRECISION phase
+    "goto_precision_start_angle": 0.087,  # rad (5 deg), start the PRECISION phase when the final turn is this close
     "goto_precision_dist_tol": 0.002,  # m, leave the PRECISION phase early when this close
     "goto_precision_angle_tol": 0.0035,  # rad (0.2 deg)
     "goto_precision_p_xy": 5.0,
@@ -1230,8 +1231,9 @@ class ZuuuHAL(Node):
                        push gets corrected. Closer than goto_aim_distance the heading is simply held,
             TURN:      closer than goto_turn_distance, rotate to the final orientation while the position loop keeps
                        holding the goal,
-            PRECISION: once within the tolerances of the goto request, full PID on x, y and theta for
-                       goto_precision_duration seconds to remove the error left by friction,
+            PRECISION: once close (within goto_turn_distance and goto_precision_start_angle, or the goto tolerances),
+                       full PID on x, y and theta for up to goto_precision_duration seconds to remove the error left
+                       by friction,
             HOLD:      back to the P controllers. With an integral term for too long, the omni-wheel rollers' steps
                        end up causing small endless corrections.
         Moves shorter than goto_aim_distance start directly in TURN (position and orientation together, like goto_tick):
@@ -1254,12 +1256,15 @@ class ZuuuHAL(Node):
             self.goto_hold_theta = self.theta_odom + angle_diff(math.atan2(dy, dx), self.theta_odom)
         heading_error = self.goto_hold_theta - self.theta_odom
 
-        arrived = distance < self.goto_action_server.dist_tol and abs(final_angle_error) < self.goto_action_server.angle_tol
+        # Close enough for the PRECISION phase: also when friction stopped the base just outside the goto tolerances
+        close = distance < max(self.goto_turn_distance, self.goto_action_server.dist_tol) and abs(final_angle_error) < max(
+            self.goto_precision_start_angle, self.goto_action_server.angle_tol
+        )
         if self.goto_phase == "ALIGN" and abs(heading_error) < self.goto_align_tolerance:
             self.set_goto_phase("DRIVE")
         elif self.goto_phase == "DRIVE" and distance < self.goto_turn_distance:
             self.set_goto_phase("TURN")
-        elif self.goto_phase == "TURN" and arrived and self.goto_precision_duration > 0:
+        elif self.goto_phase == "TURN" and close and self.goto_precision_duration > 0:
             self.set_goto_phase("PRECISION")
             self.goto_precision_t0 = time.time()
             # Signed errors on each axis of the odom frame, so that the integral terms can unwind
