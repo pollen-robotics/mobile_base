@@ -21,3 +21,17 @@ zuuu_hal:
     goto_align_tolerance: 0.15 # rad, start driving when facing the goal within this
     goto_aim_distance: 0.15 # m, aim at the goal while farther than this (shorter moves don't turn to face it)
     goto_turn_distance: 0.03 # m, rotate to the final orientation when closer than this
+    # Once arrived (within the goto tolerances), full PID for a few seconds, then back to the P-only gains.
+    # An integral term removes the error left by friction, but kept on for long, the rollers' steps cause small
+    # endless corrections. Theta gains: the no-overshoot Ziegler-Nichols tuning from 15/10/2024; x/y: same ratios.
+    goto_precision_duration: 3.0 # s, 0 disables it
+    goto_precision_start_angle: 0.087 # rad (5 deg), start once within 3 cm and this angle, even if friction stopped
+                                      # the base just outside the goto tolerances
+    goto_precision_dist_tol: 0.002 # m, back to P-only earlier once this close
+    goto_precision_angle_tol: 0.0035 # rad (0.2 deg)
+    goto_precision_p_xy: 5.0
+    goto_precision_i_xy: 22.0
+    goto_precision_d_xy: 0.74
+    goto_precision_p_theta: 3.2
+    goto_precision_i_theta: 14.2
+    goto_precision_d_theta: 0.475

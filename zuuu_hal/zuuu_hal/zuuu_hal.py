@@ -54,6 +54,16 @@ GOTO_PARAM_DEFAULTS = {
     "goto_align_tolerance": 0.15,  # rad
     "goto_aim_distance": 0.15,  # m
     "goto_turn_distance": 0.03,  # m
+    "goto_precision_duration": 3.0,  # s, 0 disables the PRECISION phase
+    "goto_precision_start_angle": 0.087,  # rad (5 deg), start the PRECISION phase when the final turn is this close
+    "goto_precision_dist_tol": 0.002,  # m, leave the PRECISION phase early when this close
+    "goto_precision_angle_tol": 0.0035,  # rad (0.2 deg)
+    "goto_precision_p_xy": 5.0,
+    "goto_precision_i_xy": 22.0,
+    "goto_precision_d_xy": 0.74,
+    "goto_precision_p_theta": 3.2,
+    "goto_precision_i_theta": 14.2,
+    "goto_precision_d_theta": 0.475,
 }
 
 
@@ -256,6 +266,8 @@ class ZuuuHAL(Node):
         self.goto_active_goal_id: int = -1
         self.goto_phase: str = "ALIGN"
         self.goto_hold_theta: float = 0.0
+        self.goto_precision_t0: float = 0.0
+        self.goto_precision_pids: List[PID] = []
 
         self.lidar_safety = LidarSafety(
             self.safety_distance,
@@ -393,6 +405,8 @@ class ZuuuHAL(Node):
             if param.name in GOTO_PARAM_DEFAULTS:
                 if param.name == "goto_strategy":
                     valid = param.value in ("staged", "legacy")
+                elif "_i_" in param.name or "_d_" in param.name or param.name == "goto_precision_duration":
+                    valid = isinstance(param.value, (int, float)) and param.value >= 0
                 else:
                     valid = isinstance(param.value, (int, float)) and param.value > 0
                 if valid:
@@ -1212,11 +1226,16 @@ class ZuuuHAL(Node):
 
         goto_tick controls the position and the final orientation at the same time, so the base rotates while it
         translates. Here the motion is split in phases, using the same P controllers as goto_tick:
-            ALIGN: rotate in place to face the goal,
-            DRIVE: drive straight to the goal. The heading loop stays active and keeps aiming at the goal, so a push
-                   gets corrected. Closer than goto_aim_distance the heading is simply held,
-            TURN:  closer than goto_turn_distance, rotate to the final orientation while the position loop keeps
-                   holding the goal.
+            ALIGN:     rotate in place to face the goal,
+            DRIVE:     drive straight to the goal. The heading loop stays active and keeps aiming at the goal, so a
+                       push gets corrected. Closer than goto_aim_distance the heading is simply held,
+            TURN:      closer than goto_turn_distance, rotate to the final orientation while the position loop keeps
+                       holding the goal,
+            PRECISION: once close (within goto_turn_distance and goto_precision_start_angle, or the goto tolerances),
+                       full PID on x, y and theta for up to goto_precision_duration seconds to remove the error left
+                       by friction,
+            HOLD:      back to the P controllers. With an integral term for too long, the omni-wheel rollers' steps
+                       end up causing small endless corrections.
         Moves shorter than goto_aim_distance start directly in TURN (position and orientation together, like goto_tick):
         no turning around to face a 5 cm correction.
         """
@@ -1237,10 +1256,47 @@ class ZuuuHAL(Node):
             self.goto_hold_theta = self.theta_odom + angle_diff(math.atan2(dy, dx), self.theta_odom)
         heading_error = self.goto_hold_theta - self.theta_odom
 
+        # Close enough for the PRECISION phase: also when friction stopped the base just outside the goto tolerances
+        close = distance < max(self.goto_turn_distance, self.goto_action_server.dist_tol) and abs(final_angle_error) < max(
+            self.goto_precision_start_angle, self.goto_action_server.angle_tol
+        )
         if self.goto_phase == "ALIGN" and abs(heading_error) < self.goto_align_tolerance:
             self.set_goto_phase("DRIVE")
         elif self.goto_phase == "DRIVE" and distance < self.goto_turn_distance:
             self.set_goto_phase("TURN")
+        elif self.goto_phase == "TURN" and close and self.goto_precision_duration > 0:
+            self.set_goto_phase("PRECISION")
+            self.goto_precision_t0 = time.time()
+            # Signed errors on each axis of the odom frame, so that the integral terms can unwind
+            pids = []
+            for goal, current, p, i, d, max_command in (
+                (self.x_goal, self.x_odom, self.goto_precision_p_xy, self.goto_precision_i_xy, self.goto_precision_d_xy,
+                 self.distance_pid.max_command),
+                (self.y_goal, self.y_odom, self.goto_precision_p_xy, self.goto_precision_i_xy, self.goto_precision_d_xy,
+                 self.distance_pid.max_command),
+                (self.theta_goal, self.theta_odom, self.goto_precision_p_theta, self.goto_precision_i_theta,
+                 self.goto_precision_d_theta, self.angle_pid.max_command),
+            ):
+                pid = PID(p=p, i=i, d=d, max_command=max_command, max_i_contribution=max_command / 2.0)
+                # Start from the current measurement, otherwise the first derivative term sees a jump from 0
+                pid.current_value = current
+                pid.set_goal(goal)
+                pids.append(pid)
+            self.goto_precision_pids = pids
+        elif self.goto_phase == "PRECISION" and (
+            time.time() - self.goto_precision_t0 > self.goto_precision_duration
+            or (distance < self.goto_precision_dist_tol and abs(final_angle_error) < self.goto_precision_angle_tol)
+        ):
+            self.set_goto_phase("HOLD")
+
+        if self.goto_phase == "PRECISION":
+            pid_x, pid_y, pid_theta = self.goto_precision_pids
+            vx_odom, vy_odom = pid_x.tick(self.x_odom), pid_y.tick(self.y_odom)
+            cos_t, sin_t = math.cos(self.theta_odom), math.sin(self.theta_odom)
+            self.x_vel_goal = vx_odom * cos_t + vy_odom * sin_t
+            self.y_vel_goal = -vx_odom * sin_t + vy_odom * cos_t
+            self.theta_vel_goal = pid_theta.tick(self.theta_odom)
+            return
 
         # Same P controllers as goto_tick (gains from the goto request)
         xy_speed = 0.0 if self.goto_phase == "ALIGN" else -self.distance_pid.tick(distance)
