@@ -172,7 +172,6 @@ class ZuuuGotoActionServer(Node):
         self.zuuu_hal.x_goal = self.zuuu_hal.x_odom
         self.zuuu_hal.y_goal = self.zuuu_hal.y_odom
         self.zuuu_hal.theta_goal = self.zuuu_hal.theta_odom
-        # The staged goto must not keep executing a phase computed for the old goal
         self.zuuu_hal.goto_goal_id += 1
 
     def goto_time(self, goal_handle, goto_request):
