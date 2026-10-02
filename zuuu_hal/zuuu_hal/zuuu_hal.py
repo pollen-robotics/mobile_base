@@ -9,6 +9,7 @@ See params.yaml for the list of ROS parameters.
 
 import copy
 import math
+from collections import deque
 import threading
 import time
 import traceback
@@ -46,6 +47,29 @@ from zuuu_interfaces.srv import (DistanceToGoal, GetBatteryVoltage,
                                  GetOdometry, GetZuuuMode, GetZuuuSafety,
                                  ResetOdometry, SetSpeed, SetZuuuMode,
                                  SetZuuuSafety)
+
+# Parameters of the staged goto (GOTO mode only). Each one is documented in config/params.yaml
+# and can be changed live with `ros2 param set /zuuu_hal <name> <value>`.
+GOTO_PARAM_DEFAULTS = {
+    "goto_strategy": "staged",  # "staged" or "legacy" (original goto_tick)
+    "goto_heading_mode": "face_target",  # heading kept while driving: "face_target", "keep" or "final"
+    "goto_allow_reverse": True,
+    "goto_align_tolerance": 0.15,  # rad
+    "goto_min_drive_distance": 0.20,  # m
+    "goto_heading_freeze_radius": 0.10,  # m
+    "goto_turn_radius": 0.02,  # m
+    "goto_decel_xy": 0.4,  # m/s^2
+    "goto_decel_theta": 1.5,  # rad/s^2
+    "goto_precision_p_xy": 10.0,  # 1/s
+    "goto_precision_p_theta": 10.0,  # 1/s
+    "goto_lookahead": 0.1,  # s
+    "goto_breakaway_rate_xy": 0.5,  # m/s per second, 0 disables
+    "goto_breakaway_rate_theta": 2.0,  # rad/s per second, 0 disables
+    "goto_park_dist_tol": 0.005,  # m
+    "goto_park_angle_tol": 0.0087,  # rad
+    "goto_unpark_factor": 3.0,
+}
+GOTO_PARAM_CHOICES = {"goto_strategy": ("staged", "legacy"), "goto_heading_mode": ("face_target", "keep", "final")}
 
 
 class ZuuuHAL(Node):
@@ -187,6 +211,10 @@ class ZuuuHAL(Node):
         self.critical_distance: float = self.get_parameter("critical_distance").get_parameter_value().double_value
         self.safety_on: bool = self.get_parameter("safety_on").get_parameter_value().bool_value
 
+        self.declare_parameters(namespace="", parameters=list(GOTO_PARAM_DEFAULTS.items()))
+        for name in GOTO_PARAM_DEFAULTS:
+            setattr(self, name, self.get_parameter(name).value)
+
     def _init_state_variables(self) -> None:
         # Initialize state variables.
         self.cmd_vel: Optional[Twist] = None
@@ -238,6 +266,14 @@ class ZuuuHAL(Node):
         self.stationary_on: bool = False
         self.already_shutdown: bool = False
         self.nb_full_com_fails: int = 0
+        # Staged goto state, reset by the goto action server for every new goal
+        self.goto_phase: Optional[str] = None
+        self.goto_short_move: bool = False
+        self.goto_hold_theta: float = 0.0
+        self.goto_xy_cmd: float = 0.0
+        self.goto_boost_xy: float = 0.0
+        self.goto_boost_theta: float = 0.0
+        self.goto_history: deque = deque(maxlen=2)
 
         self.lidar_safety = LidarSafety(
             self.safety_distance,
@@ -372,7 +408,17 @@ class ZuuuHAL(Node):
         """When a ROS parameter is changed, this method will be called to verify the change and accept/deny it."""
         success = False
         for param in params:
-            if param.type_ in [Parameter.Type.DOUBLE, Parameter.Type.INTEGER]:
+            if param.name in GOTO_PARAM_DEFAULTS:
+                if param.name in GOTO_PARAM_CHOICES:
+                    valid = param.value in GOTO_PARAM_CHOICES[param.name]
+                elif isinstance(GOTO_PARAM_DEFAULTS[param.name], bool):
+                    valid = isinstance(param.value, bool)
+                else:
+                    valid = isinstance(param.value, (int, float)) and param.value >= 0
+                if valid:
+                    setattr(self, param.name, param.value)
+                    success = True
+            elif param.type_ in [Parameter.Type.DOUBLE, Parameter.Type.INTEGER]:
                 if param.name == "laser_upper_angle":
                     self.laser_upper_angle = param.value
                     success = True
@@ -973,7 +1019,10 @@ class ZuuuHAL(Node):
             elif self.mode is ZuuuModes.SPEED:
                 self.speed_mode_tick()
             elif self.mode is ZuuuModes.GOTO:
-                self.goto_tick()
+                if self.goto_strategy == "staged":
+                    self.staged_goto_tick()
+                else:
+                    self.goto_tick()
             elif self.mode is ZuuuModes.CMD_GOTO:
                 self.cmd_goto_tick()
             # Here, the following values have been calculated: self.x_vel_goal, self.y_vel_goal, self.theta_vel_goal
@@ -1177,6 +1226,124 @@ class ZuuuHAL(Node):
         self.x_vel_goal = x_command
         self.y_vel_goal = y_command
         self.theta_vel_goal = angle_command
+
+    def staged_goto_tick(self) -> None:
+        """Tick function for the GOTO mode when goto_strategy is "staged" (see config/params.yaml).
+
+        goto_tick runs the distance loop and the angle loop together from the start, so the robot rotates while
+        it translates. Here the motion is split in phases:
+            ALIGN:  rotate in place to the heading kept while driving (goto_heading_mode, facing the goal by default),
+            DRIVE:  translate straight to the goal. The heading loop stays active (a push gets corrected): it aims at
+                    the goal, then holds the heading in the last goto_heading_freeze_radius, where the bearing to the
+                    goal becomes meaningless,
+            TURN:   rotate in place to the final orientation, while the distance loop holds the position,
+            PARKED: inside the park tolerances the wheels are braked instead of hunting around the goal, until the
+                    error grows again (the robot was pushed).
+        Speeds follow a braking curve, min(max_command, sqrt(2 * decel * error), precision_p * error): soft far from
+        the goal, then an effective gain that rises as the goal gets closer, without stopping before the goal.
+        When the robot is stuck short of the goal (static friction), a breakaway term ramps up until it moves again.
+        """
+        dt = self.main_tick_period
+        dx = self.x_goal - self.x_odom
+        dy = self.y_goal - self.y_odom
+        distance = math.sqrt(dx**2 + dy**2)
+        # Same convention as goto_tick and the action server: not wrapped, the user chooses the turn
+        final_angle_error = self.theta_goal - self.theta_odom
+        # Always park inside the tolerances of the goto request, otherwise the request would only end on timeout
+        park_dist = min(self.goto_park_dist_tol, self.goto_action_server.dist_tol / 2.0)
+        park_angle = min(self.goto_park_angle_tol, self.goto_action_server.angle_tol / 2.0)
+        turn_dist = max(self.goto_turn_radius, park_dist)
+
+        if self.goto_phase is None:
+            # New goal. Short moves keep their heading: no turning around for a 5 cm correction.
+            self.goto_short_move = distance < self.goto_min_drive_distance
+            self.goto_hold_theta = self.theta_goal if self.goto_heading_mode == "final" else self.theta_odom
+            self.goto_xy_cmd = 0.0
+            self.set_goto_phase("DRIVE" if self.goto_short_move else "ALIGN", distance, final_angle_error)
+
+        if self.goto_heading_mode == "face_target" and not self.goto_short_move and distance > self.goto_heading_freeze_radius:
+            # Look at the goal, or turn the back to it when that is a shorter rotation (if allowed)
+            heading_error = angle_diff(math.atan2(dy, dx), self.theta_odom)
+            if self.goto_allow_reverse and abs(heading_error) > math.pi / 2:
+                heading_error = angle_diff(heading_error + math.pi, 0.0)
+            self.goto_hold_theta = self.theta_odom + heading_error
+        heading_error = self.goto_hold_theta - self.theta_odom
+
+        phase = self.goto_phase
+        unpark = self.goto_unpark_factor
+        if phase == "ALIGN" and abs(heading_error) < self.goto_align_tolerance:
+            phase = "DRIVE"
+        elif phase == "DRIVE" and distance < turn_dist:
+            phase = "TURN"
+        elif phase == "TURN" and distance < park_dist and abs(final_angle_error) < park_angle:
+            phase = "PARKED"
+        elif phase == "PARKED" and (distance > unpark * park_dist or abs(final_angle_error) > unpark * park_angle):
+            phase = "TURN" if distance < unpark * turn_dist else "DRIVE"
+        if phase != self.goto_phase:
+            self.set_goto_phase(phase, distance, final_angle_error)
+
+        max_xy = self.distance_pid.max_command
+        max_theta = self.angle_pid.max_command
+        # Errors predicted goto_lookahead seconds ahead with the measured speeds: compensates the sensing and
+        # actuation delays, which otherwise make the base overshoot (acts like a damping term)
+        ux, uy = 0.0, 0.0
+        if distance > 0:
+            # Unit vector towards the goal, from the odom frame to the robot frame
+            cos_t, sin_t = math.cos(self.theta_odom), math.sin(self.theta_odom)
+            ux, uy = (dx * cos_t + dy * sin_t) / distance, (-dx * sin_t + dy * cos_t) / distance
+        distance_ahead = distance - (self.vx * ux + self.vy * uy) * self.goto_lookahead
+        theta_error = final_angle_error if phase in ("TURN", "PARKED") else heading_error
+        theta_error_ahead = theta_error - self.vtheta * self.goto_lookahead
+
+        xy_speed, theta_speed = 0.0, 0.0
+        if phase in ("DRIVE", "TURN"):
+            xy_speed = self.braking_curve(distance_ahead, max_xy, self.goto_decel_xy, self.goto_precision_p_xy)
+            if phase == "DRIVE":
+                # Soft start (the deceleration is already shaped by the braking curve)
+                xy_speed = min(xy_speed, self.goto_xy_cmd + self.max_accel_xy * dt)
+        if phase != "PARKED":
+            theta_speed = self.braking_curve(theta_error_ahead, max_theta, self.goto_decel_theta, self.goto_precision_p_theta)
+        self.goto_xy_cmd = xy_speed
+
+        # Breakaway: while the base makes no progress although it is not there yet (static friction), ramp up an
+        # extra command until it moves. Reset as soon as it progresses, so that the lower moving friction does not
+        # cause an overshoot. Progress is measured on the odometry over the last 0.1 s: the speed readings are too
+        # noisy at low speed for this.
+        self.goto_history.append((distance, abs(theta_error)))
+        old_distance, old_theta_error = self.goto_history[0]
+        window_full = len(self.goto_history) == self.goto_history.maxlen
+        xy_target = distance > (park_dist if phase == "TURN" else turn_dist)
+        if phase in ("DRIVE", "TURN") and xy_target and window_full and old_distance - distance < 0.001:
+            self.goto_boost_xy = min(self.goto_boost_xy + self.goto_breakaway_rate_xy * dt, max_xy)
+            xy_speed += self.goto_boost_xy
+        else:
+            self.goto_boost_xy = 0.0
+        theta_target = abs(theta_error) > (park_angle if phase == "TURN" else self.goto_align_tolerance)
+        if phase in ("ALIGN", "TURN") and theta_target and window_full and old_theta_error - abs(theta_error) < 0.003:
+            self.goto_boost_theta = min(self.goto_boost_theta + self.goto_breakaway_rate_theta * dt, max_theta)
+            theta_speed += math.copysign(self.goto_boost_theta, theta_error)
+        else:
+            self.goto_boost_theta = 0.0
+
+        self.x_vel_goal = xy_speed * ux
+        self.y_vel_goal = xy_speed * uy
+        self.theta_vel_goal = theta_speed
+
+    @staticmethod
+    def braking_curve(error: float, max_speed: float, decel: float, precision_p: float) -> float:
+        """Signed speed for a signed error: capped at max_speed, then slowing down at constant deceleration,
+        then proportional (gain precision_p) very close to the goal."""
+        e = abs(error)
+        return math.copysign(min(max_speed, math.sqrt(2.0 * decel * e), precision_p * e), error)
+
+    def set_goto_phase(self, phase: str, distance: float, angle_error: float) -> None:
+        self.get_logger().info(
+            f"goto phase {self.goto_phase} -> {phase} (distance {distance * 1000:.1f} mm, "
+            f"final angle error {math.degrees(angle_error):.2f} deg)"
+        )
+        self.goto_phase = phase
+        self.goto_history = deque(maxlen=max(2, int(round(0.1 / self.main_tick_period)) + 1))
+        self.goto_boost_xy, self.goto_boost_theta = 0.0, 0.0
 
     def cmd_goto_tick(self):
         t = time.time()

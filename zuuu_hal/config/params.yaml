@@ -7,7 +7,7 @@ zuuu_hal:
     max_full_com_fails: 100
     main_tick_period: 0.02
     control_mode: "OPEN_LOOP"
-    max_accel_xy: 1.0
+    max_accel_xy: 1.0 # m/s^2, only used by the staged goto (soft start of the DRIVE phase)
     max_accel_theta: 1.0
     max_speed_xy: 0.61
     max_speed_theta: 2.0
@@ -15,3 +15,35 @@ zuuu_hal:
     safety_distance: 0.70 # distance from the center of the robot
     critical_distance: 0.55 # distance from the center of the robot
     safety_on: true
+
+    # --- Goto (GOTO mode, e.g. reachy.mobile_base.goto()). All can be changed live:
+    #     ros2 param set /zuuu_hal goto_precision_p_xy 12.0
+    # "staged": rotate in place, drive straight, rotate in place, park (see staged_goto_tick).
+    # "legacy": distance and angle loops at the same time from the start (goto_tick), the behaviour before this change.
+    goto_strategy: "staged"
+    # Heading kept while driving. "face_target": look at the goal. "keep": keep the starting heading (the base
+    # slides straight, then turns at the end). "final": turn to the final heading first, then slide straight.
+    goto_heading_mode: "face_target"
+    goto_allow_reverse: true # face_target only: drive backwards when the goal is behind (shorter rotation)
+    goto_align_tolerance: 0.15 # rad, start driving when the heading error is below this
+    goto_min_drive_distance: 0.20 # m, closer goals keep their heading (no turning to face a 5 cm correction)
+    goto_heading_freeze_radius: 0.10 # m, stop aiming at the goal and hold the heading when closer than this
+    goto_turn_radius: 0.02 # m, start the final rotation when closer than this
+    # Speed profile: min(max_command, sqrt(2 * decel * error), precision_p * error).
+    # decel: how hard it brakes (lower = softer, starts braking earlier).
+    # precision_p: the gain very close to the goal. Higher beats static friction from closer but can oscillate.
+    goto_decel_xy: 0.4 # m/s^2
+    goto_decel_theta: 1.5 # rad/s^2
+    goto_precision_p_xy: 10.0 # 1/s (the legacy goto uses 5.0 everywhere)
+    goto_precision_p_theta: 10.0 # 1/s (the legacy goto uses 5.0 everywhere)
+    # The profile is applied to the error predicted this far ahead with the measured speed. Compensates the
+    # sensing/actuation delays that make the base overshoot. 0 disables, too high makes the end of the motion sluggish.
+    goto_lookahead: 0.1 # s
+    # Breakaway: when stuck short of the goal, the command grows at this rate until the base moves. 0 disables.
+    goto_breakaway_rate_xy: 0.5 # m/s per second
+    goto_breakaway_rate_theta: 2.0 # rad/s per second
+    # Park: inside these tolerances the wheels are braked instead of correcting forever. Never looser than half
+    # the tolerances of the goto request. Leaves the park when the error exceeds goto_unpark_factor * tolerance.
+    goto_park_dist_tol: 0.005 # m
+    goto_park_angle_tol: 0.0087 # rad (0.5 deg)
+    goto_unpark_factor: 3.0

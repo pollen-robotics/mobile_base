@@ -161,6 +161,8 @@ class ZuuuGotoActionServer(Node):
         self.zuuu_hal.x_goal = goto_request.x_goal
         self.zuuu_hal.y_goal = goto_request.y_goal
         self.zuuu_hal.theta_goal = goto_request.theta_goal
+        # The staged goto starts over from its first phase
+        self.zuuu_hal.goto_phase = None
         # Setting zuuu_hal mode to GOTO
         if self.zuuu_hal.mode is not ZuuuModes.GOTO:
             self.get_logger().info(f"Switching from {self.zuuu_hal.mode} mode to {ZuuuModes.GOTO}.")
