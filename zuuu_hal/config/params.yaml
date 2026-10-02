@@ -15,3 +15,9 @@ zuuu_hal:
     safety_distance: 0.70 # distance from the center of the robot
     critical_distance: 0.55 # distance from the center of the robot
     safety_on: true
+
+    # Goto (GOTO mode, e.g. reachy.mobile_base.goto()). Live: ros2 param set /zuuu_hal goto_strategy legacy
+    goto_strategy: "staged" # "staged": rotate to face the goal, drive straight, rotate. "legacy": goto_tick
+    goto_align_tolerance: 0.15 # rad, start driving when facing the goal within this
+    goto_aim_distance: 0.15 # m, aim at the goal while farther than this (shorter moves don't turn to face it)
+    goto_turn_distance: 0.03 # m, rotate to the final orientation when closer than this
